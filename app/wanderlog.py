@@ -185,6 +185,31 @@ def existing_place_ids(snapshot: dict) -> set:
     return ids
 
 
+def locate(snapshot: dict, poi: dict):
+    """(sectie-index, blok-index, blok) van een POI binnen de placeList-secties (dus niet in een dag).
+    Zoekt op opgeslagen block-id; voor oudere POI's zonder id op place_id of naam."""
+    cand = None
+    for i, s in enumerate(snapshot["itinerary"]["sections"]):
+        if s.get("mode") != "placeList":
+            continue
+        for j, b in enumerate(s.get("blocks", [])):
+            if b.get("type") != "place":
+                continue
+            if poi.get("wl_block_id"):
+                if b.get("id") == poi["wl_block_id"]:
+                    return i, j, b
+                continue
+            pl = b.get("place") or {}
+            if poi["place_id"] in (pl.get("place_id"), pl.get("placeId")) or \
+                    (pl.get("name") or "").strip().lower() == poi["name"].strip().lower():
+                cand = cand or (i, j, b)
+    return cand
+
+
+def _heading(snapshot: dict, idx: int) -> str:
+    return (snapshot["itinerary"]["sections"][idx].get("heading") or "Places to visit")
+
+
 def build_place_block(detail: dict, user_id: int) -> dict:
     return {"id": random.randint(0, 999_999_999), "type": "place", "place": detail,
             "text": {"ops": [{"insert": "\n"}]}, "addedBy": {"type": "user", "userId": user_id},
@@ -217,20 +242,23 @@ async def check() -> dict:
 
 
 async def sync(dry_run: bool = True, ids: list | None = None) -> list:
-    sql = "SELECT * FROM pois WHERE status='keep' AND synced=0"
-    pois = db.rows(sql + " ORDER BY category,name")
+    """Voegt gehouden POI's toe; verplaatst al gesyncte POI's als hun categorie (lijst) is gewijzigd."""
+    adds = db.rows("SELECT * FROM pois WHERE status='keep' AND synced=0 ORDER BY category,name")
+    tracked = db.rows("SELECT * FROM pois WHERE status='keep' AND synced=1 ORDER BY category,name")
     if ids:
-        pois = [p for p in pois if p["id"] in set(ids)]
-    if not pois:
+        adds = [p for p in adds if p["id"] in set(ids)]
+        tracked = [p for p in tracked if p["id"] in set(ids)]
+    if not adds and not tracked:
         return []
     client, rest, user_id, trip = await _open()
     mapping, results = list_map(), []
+    snap = trip.snapshot
     try:
-        known = existing_place_ids(trip.snapshot)
-        for p in pois:
+        known = existing_place_ids(snap)
+        for p in adds:
             target = mapping.get(p["category"], p["category"])
             res = {"id": p["id"], "name": p["name"], "lijst": target}
-            found = find_list(trip.snapshot, target)
+            found = find_list(snap, target)
             if not found:
                 results.append({**res, "status": "fout", "detail": f"lijst '{target}' bestaat niet in de trip"})
                 continue
@@ -252,7 +280,9 @@ async def sync(dry_run: bool = True, ids: list | None = None) -> list:
                 pid = detail.get("place_id") or detail.get("placeId")
                 if pid and pid in known:
                     if not dry_run:
-                        db.run("UPDATE pois SET synced=1 WHERE id=?", (p["id"],))
+                        loc = locate(snap, {**p, "wl_block_id": None})
+                        db.run("UPDATE pois SET synced=1, wl_block_id=?, wl_list=? WHERE id=?",
+                               (loc[2].get("id") if loc else None, _heading(snap, loc[0]) if loc else None, p["id"]))
                     results.append({**res, "status": "stond al in de trip"})
                     continue
                 if dry_run:
@@ -263,8 +293,79 @@ async def sync(dry_run: bool = True, ids: list | None = None) -> list:
                 section["blocks"].append(block)
                 if pid:
                     known.add(pid)
-                db.run("UPDATE pois SET synced=1 WHERE id=?", (p["id"],))
+                db.run("UPDATE pois SET synced=1, wl_block_id=?, wl_list=? WHERE id=?", (block["id"], target, p["id"]))
                 results.append({**res, "status": "toegevoegd", "detail": detail.get("name")})
+                await asyncio.sleep(0.3)
+            except WanderlogError as e:
+                results.append({**res, "status": "fout", "detail": str(e)})
+
+        # al gesyncte POI's: verplaatsen als de categorie is gewijzigd
+        for p in tracked:
+            target = mapping.get(p["category"], p["category"])
+            found = locate(snap, p)
+            if not found:  # door jou naar een dag verplaatst of verwijderd: met rust laten
+                continue
+            si, bi, block = found
+            tgt = find_list(snap, target)
+            cur = _heading(snap, si)
+            res = {"id": p["id"], "name": p["name"], "lijst": target}
+            if not tgt:
+                if cur.strip().lower() != target.strip().lower():
+                    results.append({**res, "status": "fout", "detail": f"lijst '{target}' bestaat niet in de trip"})
+                continue
+            ti, tsec = tgt
+            if ti == si:  # staat al goed; ids bijwerken voor oudere POI's
+                if not dry_run and (p.get("wl_block_id") != block.get("id") or p.get("wl_list") != cur):
+                    db.run("UPDATE pois SET wl_block_id=?, wl_list=? WHERE id=?", (block.get("id"), cur, p["id"]))
+                continue
+            if dry_run:
+                results.append({**res, "status": "proefrun", "detail": f"zou verplaatsen van '{cur}' naar '{target}'"})
+                continue
+            try:
+                await trip.submit([
+                    {"p": ["itinerary", "sections", si, "blocks", bi], "ld": block},
+                    {"p": ["itinerary", "sections", ti, "blocks", len(tsec["blocks"])], "li": block}])
+                snap["itinerary"]["sections"][si]["blocks"].pop(bi)
+                tsec["blocks"].append(block)
+                db.run("UPDATE pois SET wl_block_id=?, wl_list=? WHERE id=?", (block.get("id"), target, p["id"]))
+                results.append({**res, "status": "verplaatst", "detail": f"van '{cur}'"})
+            except WanderlogError as e:
+                results.append({**res, "status": "fout", "detail": str(e)})
+        return results
+    finally:
+        await trip.close()
+        await client.aclose()
+
+
+async def remove(dry_run: bool = True, ids: list | None = None) -> list:
+    """Haalt gesyncte POI's uit Wanderlog die je daarna hebt uitgevinkt/afgewezen (status != keep).
+    Alleen blokken in een lijst; staat de plek niet meer in een lijst (bijv. naar een dag gesleept), dan blijft hij staan."""
+    pois = db.rows("SELECT * FROM pois WHERE synced=1 AND status!='keep' ORDER BY category,name")
+    if ids:
+        pois = [p for p in pois if p["id"] in set(ids)]
+    if not pois:
+        return []
+    client, rest, user_id, trip = await _open()
+    snap, results = trip.snapshot, []
+    try:
+        for p in pois:
+            res = {"id": p["id"], "name": p["name"], "lijst": p.get("wl_list") or ""}
+            found = locate(snap, p)
+            if not found:
+                if not dry_run:
+                    db.run("UPDATE pois SET synced=0, wl_block_id=NULL, wl_list=NULL WHERE id=?", (p["id"],))
+                results.append({**res, "status": "laat staan", "detail": "niet (meer) in een lijst: niet aangeraakt, niet meer gekoppeld"})
+                continue
+            si, bi, block = found
+            res["lijst"] = _heading(snap, si)
+            if dry_run:
+                results.append({**res, "status": "proefrun", "detail": "zou verwijderen"})
+                continue
+            try:
+                await trip.submit([{"p": ["itinerary", "sections", si, "blocks", bi], "ld": block}])
+                snap["itinerary"]["sections"][si]["blocks"].pop(bi)
+                db.run("UPDATE pois SET synced=0, wl_block_id=NULL, wl_list=NULL WHERE id=?", (p["id"],))
+                results.append({**res, "status": "verwijderd"})
                 await asyncio.sleep(0.3)
             except WanderlogError as e:
                 results.append({**res, "status": "fout", "detail": str(e)})

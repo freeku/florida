@@ -39,6 +39,7 @@
     <textarea id="urls" rows="2" placeholder="Plak Instagram-URL's (één of meer)…"></textarea>
     <div class="row"><button class="primary" id="add">Toevoegen &amp; parsen</button><button id="refresh">Ververs</button><button id="retry" title="Zet posts met status error opnieuw in de wachtrij">Mislukte opnieuw</button></div>
     <div class="row"><button id="wlCheck">Wanderlog: controleer</button><button id="wlDry">Proefrun sync</button><button id="wlSync" class="primary">Sync naar Wanderlog</button></div>
+    <div class="row"><button id="wlRemDry">Proefrun verwijderen</button><button id="wlRem">Verwijder uitgevinkte uit Wanderlog</button></div>
     <div id="msg"></div>
     <pre id="syncOut" style="font-size:11px;white-space:pre-wrap;margin:4px 0 0;max-height:22vh;overflow:auto"></pre>
     <div class="row">
@@ -85,6 +86,8 @@ async function init() {
   const post = dry => ({method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({dry_run:dry})});
   $("#wlCheck").onclick = () => wl("/api/sync/wanderlog/check", undefined, "Controleren");
   $("#wlDry").onclick = () => wl("/api/sync/wanderlog", post(true), "Proefrun");
+  $("#wlRemDry").onclick = () => wl("/api/sync/wanderlog/remove", post(true), "Proefrun verwijderen");
+  $("#wlRem").onclick = () => { const n = pois.filter(p => p.synced && p.status !== "keep").length; if (n && confirm(`${n} uitgevinkte/afgewezen POI's uit Wanderlog verwijderen?`)) wl("/api/sync/wanderlog/remove", post(false), "Verwijderen"); else if (!n) $("#syncOut").textContent = "Geen gesyncte POI's die zijn uitgevinkt."; };
   $("#wlSync").onclick = () => { if (confirm("Gehouden POI's nu toevoegen aan Wanderlog?")) wl("/api/sync/wanderlog", post(false), "Syncen"); };
   $("#retry").onclick = async () => { const r = await api("/api/posts/retry-failed", {method:"POST"}); $("#msg").textContent = `${r.retrying} posts opnieuw in de wachtrij…`; setTimeout(load, 5000); setTimeout(load, 15000); };
   $("#add").onclick = async () => {

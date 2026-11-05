@@ -57,6 +57,10 @@ def conn():
 def init():
     with conn() as c:
         c.executescript(SCHEMA)
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(pois)")}
+        for col, typ in (("wl_block_id", "INTEGER"), ("wl_list", "TEXT")):
+            if col not in cols:
+                c.execute(f"ALTER TABLE pois ADD COLUMN {col} {typ}")
 
 
 def rows(sql, args=()):

@@ -165,6 +165,11 @@ def wl_sync(body: SyncIn):
     return _wl(wanderlog.sync(dry_run=body.dry_run, ids=body.ids))
 
 
+@app.post("/api/sync/wanderlog/remove")
+def wl_remove(body: SyncIn):
+    return _wl(wanderlog.remove(dry_run=body.dry_run, ids=body.ids))
+
+
 @app.get("/")
 def index():
     return FileResponse("static/index.html")

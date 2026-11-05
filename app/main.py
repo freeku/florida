@@ -98,6 +98,16 @@ def set_text(shortcode: str, body: TextIn, bg: BackgroundTasks):
     return {"ok": True}
 
 
+@app.post("/api/posts/retry-failed")
+def retry_failed(bg: BackgroundTasks):
+    """Zet alle posts met status error opnieuw in de wachtrij (bijv. na een key-fix)."""
+    codes = [r["shortcode"] for r in db.rows("SELECT shortcode FROM posts WHERE status='error'")]
+    for sc in codes:
+        db.run("UPDATE posts SET status='queued', error=NULL WHERE shortcode=?", (sc,))
+        bg.add_task(ingest.process, sc)
+    return {"retrying": len(codes)}
+
+
 @app.post("/api/posts/{shortcode}/retry")
 def retry(shortcode: str, bg: BackgroundTasks):
     db.run("UPDATE posts SET status='queued', error=NULL WHERE shortcode=?", (shortcode,))

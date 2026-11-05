@@ -37,7 +37,7 @@
   <header>
     <h1>Florida POI's <span id="counts" style="font-weight:400;color:#667"></span></h1>
     <textarea id="urls" rows="2" placeholder="Plak Instagram-URL's (één of meer)…"></textarea>
-    <div class="row"><button class="primary" id="add">Toevoegen &amp; parsen</button><button id="refresh">Ververs</button></div>
+    <div class="row"><button class="primary" id="add">Toevoegen &amp; parsen</button><button id="refresh">Ververs</button><button id="retry" title="Zet posts met status error opnieuw in de wachtrij">Mislukte opnieuw</button></div>
     <div id="msg"></div>
     <div class="row">
       <select id="fStatus"><option value="">Alle statussen</option><option value="new">Nieuw</option><option value="keep">Houden</option><option value="reject">Afgewezen</option></select>
@@ -70,6 +70,7 @@ async function init() {
   layer = L.layerGroup().addTo(map);
   ["fStatus","fCat","fBase","fKm"].forEach(id => $("#"+id).addEventListener("input", render));
   $("#refresh").onclick = load;
+  $("#retry").onclick = async () => { const r = await api("/api/posts/retry-failed", {method:"POST"}); $("#msg").textContent = `${r.retrying} posts opnieuw in de wachtrij…`; setTimeout(load, 5000); setTimeout(load, 15000); };
   $("#add").onclick = async () => {
     const text = $("#urls").value.trim(); if (!text) return;
     const r = await api("/api/posts", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({text})});

@@ -1,0 +1,19 @@
+services:
+  florida-poi:
+    image: ghcr.io/freeku/florida:latest
+    # build: .          # lokaal bouwen i.p.v. image uit GHCR
+    container_name: florida-poi
+    restart: unless-stopped
+    ports:
+      - "8140:8000"
+    volumes:
+      - /volume1/docker/florida-poi:/data
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GOOGLE_PLACES_KEY: ${GOOGLE_PLACES_KEY:-}   # leeg = fallback op OSM Nominatim
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5-5}
+      IG_USER: ${IG_USER:-}                       # optioneel, voor Instaloader-sessie
+      IG_SESSION_FILE: /data/ig-session
+      # CATEGORIES: "Dingen om te doen,Restaurants,(Sport)bars,Stranden & natuur,Winkelen,Overig"

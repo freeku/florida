@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Florida POI's</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root { --bd:#d7d9de; --bg:#f6f7f9; --ac:#1f6feb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px system-ui, sans-serif; display:grid; grid-template-columns: 420px 1fr; height:100vh; }
+  #side { display:flex; flex-direction:column; border-right:1px solid var(--bd); min-height:0; }
+  #map { height:100vh; }
+  header { padding:10px; border-bottom:1px solid var(--bd); background:var(--bg); }
+  header h1 { font-size:15px; margin:0 0 8px; }
+  textarea, select, input[type=text], input[type=number] { width:100%; padding:6px; border:1px solid var(--bd); border-radius:6px; font:inherit; }
+  button { padding:6px 10px; border:1px solid var(--bd); border-radius:6px; background:#fff; cursor:pointer; font:inherit; }
+  button.primary { background:var(--ac); color:#fff; border-color:var(--ac); }
+  .row { display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap; }
+  .row > * { flex:1; min-width:90px; }
+  #list { overflow:auto; flex:1; }
+  .cat { position:sticky; top:0; background:var(--bg); padding:5px 10px; font-weight:600; border-bottom:1px solid var(--bd); }
+  .poi { padding:8px 10px; border-bottom:1px solid #eceef1; display:grid; grid-template-columns: 24px 1fr; gap:8px; }
+  .poi.reject { opacity:.45; }
+  .poi .n { font-weight:600; cursor:pointer; }
+  .poi small { color:#667; display:block; }
+  .poi select { width:auto; font-size:12px; padding:2px; margin-top:4px; }
+  .tag { font-size:11px; padding:1px 6px; border-radius:10px; background:#e8eefc; margin-left:4px; }
+  .tag.synced { background:#dff5e3; }
+  .posts { padding:8px 10px; font-size:12px; border-top:1px solid var(--bd); max-height:28vh; overflow:auto; background:var(--bg); }
+  .posts textarea { height:46px; margin-top:4px; }
+  #msg { font-size:12px; color:#555; margin-top:4px; min-height:16px; }
+</style>
+</head>
+<body>
+<div id="side">
+  <header>
+    <h1>Florida POI's <span id="counts" style="font-weight:400;color:#667"></span></h1>
+    <textarea id="urls" rows="2" placeholder="Plak Instagram-URL's (één of meer)…"></textarea>
+    <div class="row"><button class="primary" id="add">Toevoegen &amp; parsen</button><button id="refresh">Ververs</button></div>
+    <div id="msg"></div>
+    <div class="row">
+      <select id="fStatus"><option value="">Alle statussen</option><option value="new">Nieuw</option><option value="keep">Houden</option><option value="reject">Afgewezen</option></select>
+      <select id="fCat"><option value="">Alle categorieën</option></select>
+    </div>
+    <div class="row">
+      <label style="flex:2">Max. afstand tot <select id="fBase" style="width:auto;display:inline"><option>Miami</option><option>Key Largo</option></select></label>
+      <input type="number" id="fKm" value="80" min="1"> <span style="flex:0">km</span>
+    </div>
+  </header>
+  <div id="list"></div>
+  <div class="posts" id="posts"></div>
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const COLORS = ["#e6194b","#3cb44b","#4363d8","#f58231","#911eb4","#008080","#9a6324","#808000","#000075"];
+let cfg, pois = [], markers = {}, map, layer, catColor = {};
+
+const $ = s => document.querySelector(s);
+const api = (p, o) => fetch(p, o).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }));
+const patch = (id, body) => api(`/api/pois/${id}`, {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+
+async function init() {
+  cfg = await api("/api/config");
+  cfg.categories.forEach((c,i) => { catColor[c] = COLORS[i % COLORS.length]; $("#fCat").add(new Option(c, c)); });
+  map = L.map("map").setView([25.77,-80.2], 10);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:"© OpenStreetMap"}).addTo(map);
+  layer = L.layerGroup().addTo(map);
+  ["fStatus","fCat","fBase","fKm"].forEach(id => $("#"+id).addEventListener("input", render));
+  $("#refresh").onclick = load;
+  $("#add").onclick = async () => {
+    const text = $("#urls").value.trim(); if (!text) return;
+    const r = await api("/api/posts", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({text})});
+    $("#msg").textContent = `${r.new} nieuw, ${r.duplicates} al bekend. Parsen draait op de achtergrond…`;
+    $("#urls").value = ""; setTimeout(load, 4000); setTimeout(load, 12000);
+  };
+  await load();
+}
+
+async function load() {
+  [pois] = await Promise.all([api("/api/pois"), loadPosts()]);
+  render();
+}
+
+function visible(p) {
+  const st = $("#fStatus").value, cat = $("#fCat").value, base = $("#fBase").value === "Miami" ? "km_miami" : "km_keylargo";
+  const max = parseFloat($("#fKm").value) || 1e9;
+  return (!st || p.status === st) && (!cat || p.category === cat) && p[base] <= max;
+}
+
+function render() {
+  layer.clearLayers(); markers = {};
+  const vis = pois.filter(visible);
+  $("#counts").textContent = `(${vis.length}/${pois.length} · ${pois.filter(p=>p.status==="keep").length} gehouden)`;
+  const byCat = {};
+  vis.forEach(p => (byCat[p.category] ||= []).push(p));
+  const list = $("#list"); list.innerHTML = "";
+  Object.keys(byCat).sort().forEach(cat => {
+    const h = document.createElement("div"); h.className = "cat"; h.textContent = `${cat} (${byCat[cat].length})`; list.append(h);
+    byCat[cat].forEach(p => list.append(row(p)));
+  });
+  vis.forEach(p => {
+    const m = L.circleMarker([p.lat,p.lng], {radius:p.status==="keep"?10:7, color:"#fff", weight:1.5, fillColor:catColor[p.category]||"#888", fillOpacity:p.status==="reject"?.25:.9})
+      .addTo(layer).bindPopup(`<b>${esc(p.name)}</b><br>${esc(p.category)}<br>${p.sources.map(s=>`<a target=_blank href="${s.url}">post</a>`).join(" · ")}${p.gmaps_url?` · <a target=_blank href="${p.gmaps_url}">kaart</a>`:""}`);
+    markers[p.id] = m;
+  });
+}
+
+function row(p) {
+  const d = document.createElement("div"); d.className = "poi " + p.status;
+  const cb = Object.assign(document.createElement("input"), {type:"checkbox", checked:p.status==="keep"});
+  cb.onchange = async () => { p.status = cb.checked ? "keep" : "new"; await patch(p.id, {status:p.status}); render(); };
+  const body = document.createElement("div");
+  body.innerHTML = `<span class="n">${esc(p.name)}</span>${p.synced?'<span class="tag synced">in Wanderlog</span>':""}
+    <small>${esc(p.address||"")}</small>
+    <small>${p.km_miami} km van Miami · ${p.km_keylargo} km van Key Largo · ${p.sources.length}× genoemd</small>`;
+  const sel = document.createElement("select");
+  cfg.categories.forEach(c => sel.add(new Option(c, c, false, c === p.category)));
+  sel.onchange = async () => { p.category = sel.value; await patch(p.id, {category:sel.value}); render(); };
+  const rej = document.createElement("button"); rej.textContent = p.status==="reject" ? "Herstel" : "Afwijzen"; rej.style.cssText = "margin-left:6px;font-size:12px;padding:2px 6px";
+  rej.onclick = async () => { p.status = p.status==="reject" ? "new" : "reject"; await patch(p.id, {status:p.status}); render(); };
+  body.append(sel, rej);
+  body.querySelector(".n").onclick = () => { map.setView([p.lat,p.lng], 15); markers[p.id]?.openPopup(); };
+  d.append(cb, body); return d;
+}
+
+async function loadPosts() {
+  const ps = await api("/api/posts");
+  const el = $("#posts");
+  const pending = ps.filter(p => p.status !== "parsed");
+  el.innerHTML = `<b>Posts: ${ps.length}</b> (${ps.length-pending.length} geparsed)`;
+  pending.forEach(p => {
+    const d = document.createElement("div"); d.style.marginTop = "6px";
+    d.innerHTML = `<a target=_blank href="${p.url}">${p.shortcode}</a> — ${p.status}${p.error?": "+esc(p.error):""}`;
+    if (p.status === "needs_text" || p.status === "error") {
+      const ta = document.createElement("textarea"); ta.placeholder = "Plak caption / noem de plek(ken) uit de video…";
+      const b = document.createElement("button"); b.textContent = "Parse";
+      b.onclick = async () => { await api(`/api/posts/${p.shortcode}/text`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({text:ta.value})}); setTimeout(load, 4000); };
+      d.append(ta, b);
+    }
+    el.append(d);
+  });
+}
+
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+init();
+</script>
+</body>
+</html>

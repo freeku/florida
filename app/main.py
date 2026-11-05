@@ -1,3 +1,4 @@
+import threading
 from typing import Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
@@ -10,6 +11,14 @@ import ingest
 
 app = FastAPI(title="florida-poi")
 db.init()
+
+
+@app.on_event("startup")
+def resume_queue():
+    """Posts die bij een herstart nog op 'queued' stonden weer oppakken (de wachtrij zit in het geheugen)."""
+    codes = [r["shortcode"] for r in db.rows("SELECT shortcode FROM posts WHERE status='queued' ORDER BY created")]
+    if codes:
+        threading.Thread(target=lambda: [ingest.process(c) for c in codes], daemon=True).start()
 
 
 class UrlsIn(BaseModel):

@@ -34,7 +34,7 @@ class IdsIn(BaseModel):
 @app.get("/api/config")
 def config():
     return {"categories": ingest.CATEGORIES,
-            "bases": {"Miami": ingest.MIAMI, "Key Largo": ingest.KEY_LARGO}}
+            "bases": ingest.BASES}
 
 
 @app.get("/api/pois")

@@ -19,6 +19,14 @@ IG_SESSION_FILE = os.getenv("IG_SESSION_FILE", "/data/ig-session")
 
 MIAMI = (25.7617, -80.1918)
 KEY_LARGO = (25.0865, -80.4473)
+# Basispunten voor het afstandsfilter in de UI (naam -> lat, lng)
+BASES = {
+    "Miami": MIAMI,
+    "Key Largo": KEY_LARGO,
+    "Kennedy Space Center": (28.5729, -80.6490),
+    "Cocoa Beach": (28.3200, -80.6076),
+    "Orlando": (28.5383, -81.3792),
+}
 
 SHORTCODE_RE = re.compile(r"instagram\.com/(?:[\w.]+/)?(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)")
 

@@ -44,7 +44,7 @@
       <select id="fCat"><option value="">Alle categorieën</option></select>
     </div>
     <div class="row">
-      <label style="flex:2">Max. afstand tot <select id="fBase" style="width:auto;display:inline"><option>Miami</option><option>Key Largo</option></select></label>
+      <label style="flex:2">Max. afstand tot <select id="fBase" style="width:auto;display:inline"></select></label>
       <input type="number" id="fKm" value="80" min="1"> <span style="flex:0">km</span>
     </div>
   </header>
@@ -64,6 +64,8 @@ const patch = (id, body) => api(`/api/pois/${id}`, {method:"PATCH", headers:{"Co
 
 async function init() {
   cfg = await api("/api/config");
+  Object.keys(cfg.bases).forEach(b => $("#fBase").add(new Option(b, b)));
+  $("#fBase").add(new Option("(geen filter)", ""));
   cfg.categories.forEach((c,i) => { catColor[c] = COLORS[i % COLORS.length]; $("#fCat").add(new Option(c, c)); });
   map = L.map("map").setView([25.77,-80.2], 10);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:"© OpenStreetMap"}).addTo(map);
@@ -85,10 +87,18 @@ async function load() {
   render();
 }
 
+function dist(p, base) {
+  const b = cfg.bases[base]; if (!b) return null;
+  const r = Math.PI / 180, dLa = (p.lat - b[0]) * r, dLo = (p.lng - b[1]) * r;
+  const a = Math.sin(dLa/2)**2 + Math.cos(b[0]*r) * Math.cos(p.lat*r) * Math.sin(dLo/2)**2;
+  return Math.round(2 * 6371 * Math.asin(Math.sqrt(a)) * 10) / 10;
+}
+
 function visible(p) {
-  const st = $("#fStatus").value, cat = $("#fCat").value, base = $("#fBase").value === "Miami" ? "km_miami" : "km_keylargo";
+  const st = $("#fStatus").value, cat = $("#fCat").value, base = $("#fBase").value;
   const max = parseFloat($("#fKm").value) || 1e9;
-  return (!st || p.status === st) && (!cat || p.category === cat) && p[base] <= max;
+  const d = dist(p, base);
+  return (!st || p.status === st) && (!cat || p.category === cat) && (d === null || d <= max);
 }
 
 function render() {
@@ -116,7 +126,7 @@ function row(p) {
   const body = document.createElement("div");
   body.innerHTML = `<span class="n">${esc(p.name)}</span>${p.synced?'<span class="tag synced">in Wanderlog</span>':""}
     <small>${esc(p.address||"")}</small>
-    <small>${p.km_miami} km van Miami · ${p.km_keylargo} km van Key Largo · ${p.sources.length}× genoemd</small>`;
+    <small>${$("#fBase").value ? dist(p, $("#fBase").value) + " km van " + $("#fBase").value + " · " : ""}${p.sources.length}× genoemd</small>`;
   const sel = document.createElement("select");
   cfg.categories.forEach(c => sel.add(new Option(c, c, false, c === p.category)));
   sel.onchange = async () => { p.category = sel.value; await patch(p.id, {category:sel.value}); render(); };

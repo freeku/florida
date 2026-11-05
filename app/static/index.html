@@ -27,7 +27,7 @@
   .poi select { width:auto; font-size:12px; padding:2px; margin-top:4px; }
   .tag { font-size:11px; padding:1px 6px; border-radius:10px; background:#e8eefc; margin-left:4px; }
   .tag.synced { background:#dff5e3; }
-  .posts { padding:8px 10px; font-size:12px; border-top:1px solid var(--bd); max-height:28vh; overflow:auto; background:var(--bg); }
+  .posts { padding:8px 10px; font-size:12px; border-top:1px solid var(--bd); max-height:40vh; overflow:auto; background:var(--bg); }
   .posts textarea { height:46px; margin-top:4px; }
   #msg { font-size:12px; color:#555; margin-top:4px; min-height:16px; }
 </style>
@@ -153,6 +153,18 @@ async function loadPosts() {
     }
     el.append(d);
   });
+  const det = document.createElement("details"); det.style.marginTop = "8px";
+  det.innerHTML = `<summary>Alle posts: wat is eruit gehaald</summary>`;
+  ps.filter(p => p.status === "parsed").forEach(p => {
+    let c = []; try { c = JSON.parse(p.parsed) || []; } catch (e) {}
+    const ok = c.filter(x => x.resolved).length;
+    const d = document.createElement("details");
+    d.innerHTML = `<summary><a target=_blank href="${p.url}">${p.shortcode}</a> — ${ok}/${c.length} plekken gekoppeld</summary>` +
+      `<ul style="margin:4px 0 4px 16px;padding:0">${c.map(x => `<li>${x.resolved ? "✓" : "✗"} ${esc(x.name)}${x.city ? ", " + esc(x.city) : ""}</li>`).join("")}</ul>` +
+      `<pre style="white-space:pre-wrap;font-size:11px;max-height:120px;overflow:auto">${esc(p.caption || "")}</pre>`;
+    det.append(d);
+  });
+  el.append(det);
 }
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));

@@ -94,7 +94,7 @@ def add_posts(body: UrlsIn, bg: BackgroundTasks):
 
 @app.get("/api/posts")
 def list_posts():
-    return db.rows("SELECT shortcode,url,status,error,parsed,substr(caption,1,300) AS caption FROM posts ORDER BY created DESC")
+    return db.rows("SELECT shortcode,url,status,error,parsed,substr(caption,1,4000) AS caption FROM posts ORDER BY created DESC")
 
 
 @app.post("/api/posts/{shortcode}/text")

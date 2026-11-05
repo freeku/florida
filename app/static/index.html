@@ -38,7 +38,9 @@
     <h1>Florida POI's <span id="counts" style="font-weight:400;color:#667"></span></h1>
     <textarea id="urls" rows="2" placeholder="Plak Instagram-URL's (één of meer)…"></textarea>
     <div class="row"><button class="primary" id="add">Toevoegen &amp; parsen</button><button id="refresh">Ververs</button><button id="retry" title="Zet posts met status error opnieuw in de wachtrij">Mislukte opnieuw</button></div>
+    <div class="row"><button id="wlCheck">Wanderlog: controleer</button><button id="wlDry">Proefrun sync</button><button id="wlSync" class="primary">Sync naar Wanderlog</button></div>
     <div id="msg"></div>
+    <pre id="syncOut" style="font-size:11px;white-space:pre-wrap;margin:4px 0 0;max-height:22vh;overflow:auto"></pre>
     <div class="row">
       <select id="fStatus"><option value="">Alle statussen</option><option value="new">Nieuw</option><option value="keep">Houden</option><option value="reject">Afgewezen</option></select>
       <select id="fCat"><option value="">Alle categorieën</option></select>
@@ -72,6 +74,18 @@ async function init() {
   layer = L.layerGroup().addTo(map);
   ["fStatus","fCat","fBase","fKm"].forEach(id => $("#"+id).addEventListener("input", render));
   $("#refresh").onclick = load;
+  const wl = async (url, opts, label) => {
+    $("#syncOut").textContent = label + "…";
+    try {
+      const r = await api(url, opts);
+      $("#syncOut").textContent = Array.isArray(r) ? (r.length ? r.map(x => `${x.status.toUpperCase()}: ${x.name} → ${x.lijst}${x.detail ? " (" + x.detail + ")" : ""}`).join("\n") : "Niets te syncen (geen gehouden POI's).") : JSON.stringify(r, null, 1);
+    } catch (e) { $("#syncOut").textContent = "Fout: " + e.message; }
+    load();
+  };
+  const post = dry => ({method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({dry_run:dry})});
+  $("#wlCheck").onclick = () => wl("/api/sync/wanderlog/check", undefined, "Controleren");
+  $("#wlDry").onclick = () => wl("/api/sync/wanderlog", post(true), "Proefrun");
+  $("#wlSync").onclick = () => { if (confirm("Gehouden POI's nu toevoegen aan Wanderlog?")) wl("/api/sync/wanderlog", post(false), "Syncen"); };
   $("#retry").onclick = async () => { const r = await api("/api/posts/retry-failed", {method:"POST"}); $("#msg").textContent = `${r.retrying} posts opnieuw in de wachtrij…`; setTimeout(load, 5000); setTimeout(load, 15000); };
   $("#add").onclick = async () => {
     const text = $("#urls").value.trim(); if (!text) return;

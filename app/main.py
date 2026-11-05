@@ -1,3 +1,4 @@
+import asyncio
 import threading
 from typing import Optional
 
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 
 import db
 import ingest
+import wanderlog
 
 app = FastAPI(title="florida-poi")
 db.init()
@@ -136,6 +138,31 @@ def mark_synced(body: IdsIn):
     for i in body.ids:
         db.run("UPDATE pois SET synced=1 WHERE id=?", (i,))
     return {"ok": True, "count": len(body.ids)}
+
+
+class SyncIn(BaseModel):
+    dry_run: bool = True
+    ids: Optional[list[int]] = None
+
+
+def _wl(coro):
+    try:
+        return asyncio.run(coro)
+    except wanderlog.WanderlogError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:  # netwerk, websocket, ...
+        raise HTTPException(502, f"{type(e).__name__}: {e}")
+
+
+@app.get("/api/sync/wanderlog/check")
+def wl_check():
+    """Controleert cookie, trip en of de benodigde lijsten bestaan (schrijft niets)."""
+    return _wl(wanderlog.check())
+
+
+@app.post("/api/sync/wanderlog")
+def wl_sync(body: SyncIn):
+    return _wl(wanderlog.sync(dry_run=body.dry_run, ids=body.ids))
 
 
 @app.get("/")

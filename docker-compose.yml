@@ -16,4 +16,7 @@ services:
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5-5}
       IG_USER: ${IG_USER:-}                       # optioneel, voor Instaloader-sessie
       IG_SESSION_FILE: /data/ig-session
+      WANDERLOG_COOKIE: ${WANDERLOG_COOKIE:-}      # connect.sid (s%3A...) van wanderlog.com
+      WANDERLOG_TRIP_KEY: ${WANDERLOG_TRIP_KEY:-}  # code uit de trip-URL
+      # WANDERLOG_LISTS: '{"Dingen om te doen":"Places to visit","Winkelen":"Shoppen"}'
       # CATEGORIES: "Dingen om te doen,Restaurants,(Sport)bars,Stranden & natuur,Winkelen,Overig"

@@ -19,6 +19,14 @@ UI: `http://<nas>:8140` (geen eigen login: alleen LAN of achter reverse proxy me
 - Kaart: filter op status, categorie en afstand tot Miami/Key Largo; vink aan = `keep`; "Afwijzen" dempt de POI.
 - Dubbele plekken (zelfde `place_id`, of <250 m + vergelijkbare naam) worden één POI met meerdere bronposts.
 
+## Sync naar Wanderlog (rechtstreeks, zonder MCP)
+Onofficieel: gebruikt Wanderlogs interne web-API met je sessiecookie. Instellen in de stack-variabelen:
+- `WANDERLOG_COOKIE`: waarde van de cookie `connect.sid` (begint met `s%3A`). Chrome: wanderlog.com openen, ingelogd → DevTools → Application → Cookies → `connect.sid` → Value kopiëren. Verloopt na enkele weken; bij een fout "sessie geweigerd" opnieuw ophalen.
+- `WANDERLOG_TRIP_KEY`: de code in de trip-URL (`wanderlog.com/plan/<key>/…`).
+- `WANDERLOG_LISTS` (optioneel, JSON): categorie in de app → lijstnaam in Wanderlog. Standaard: `Dingen om te doen` → `Places to visit`, `Winkelen` → `Shoppen`; de overige namen moeten gelijk zijn.
+
+Knoppen in de UI: **controleer** (cookie, trip en ontbrekende lijsten; schrijft niets), **proefrun** (laat zien wat er zou gebeuren), **sync** (voegt toe en zet de POI op `gesynced`). Plekken die al in de trip staan worden overgeslagen. Tests: `cd app && python -I ../tests/test_wanderlog_fake.py` (nagebootste Wanderlog; de echte API is niet getest).
+
 ## API voor de Wanderlog-sync
 - `GET /api/export/approved` → `keep` + nog niet gesynced
 - `POST /api/export/mark-synced` `{"ids":[...]}`

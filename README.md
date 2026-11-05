@@ -25,6 +25,8 @@ Onofficieel: gebruikt Wanderlogs interne web-API met je sessiecookie. Instellen 
 - `WANDERLOG_TRIP_KEY`: de code in de trip-URL (`wanderlog.com/plan/<key>/…`).
 - `WANDERLOG_LISTS` (optioneel, JSON): categorie in de app → lijstnaam in Wanderlog. Standaard: `Dingen om te doen` → `Places to visit`, `Winkelen` → `Shoppen`; de overige namen moeten gelijk zijn.
 
+Na het syncen houdt de app per POI het Wanderlog-blok bij. Verander je daarna de categorie, dan **verplaatst** de volgende sync het blok naar de juiste lijst (notities blijven behouden). Vink je een gesyncte POI uit of wijs je hem af, dan blijft hij in Wanderlog staan tot je op **Verwijder uitgevinkte uit Wanderlog** klikt (met proefrun en bevestiging). Staat een plek niet meer in een lijst (bijv. naar een dag gesleept), dan blijft hij onaangeroerd.
+
 Knoppen in de UI: **controleer** (cookie, trip en ontbrekende lijsten; schrijft niets), **proefrun** (laat zien wat er zou gebeuren), **sync** (voegt toe en zet de POI op `gesynced`). Plekken die al in de trip staan worden overgeslagen. Tests: `cd app && python -I ../tests/test_wanderlog_fake.py` (nagebootste Wanderlog; de echte API is niet getest).
 
 ## API voor de Wanderlog-sync

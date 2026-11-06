@@ -87,6 +87,7 @@ async function init() {
   map = L.map("map").setView([25.77,-80.2], 10);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:"© OpenStreetMap"}).addTo(map);
   layer = L.layerGroup().addTo(map);
+  map.on("click", () => { if (selectedId != null) deselect(); });
   ["fStatus","fCat","fBase","fKm"].forEach(id => $("#"+id).addEventListener("input", render));
   $("#refresh").onclick = load;
   const wl = async (url, opts, label) => {
@@ -114,7 +115,8 @@ async function init() {
   document.addEventListener("keydown", e => {
     if (e.target.closest("input,select,textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
     const p = pois.find(x => x.id === selectedId);
-    if (e.key === "ArrowDown") { e.preventDefault(); step(1); }
+    if (e.key === "Escape") deselect();
+    else if (e.key === "ArrowDown") { e.preventDefault(); step(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); step(-1); }
     else if (p && e.key === "k") decide(p, p.status === "keep" ? "new" : "keep");
     else if (p && e.key === "x") decide(p, p.status === "reject" ? "new" : "reject");
@@ -162,7 +164,7 @@ function render() {
   vis.forEach(p => {
     const sel = p.id === selectedId;
     const m = L.circleMarker([p.lat, p.lng], {radius: sel ? 13 : p.status === "keep" ? 10 : 7, color: sel ? "#000" : "#fff", weight: sel ? 3 : 1.5,
-      fillColor: catColor[p.category] || "#888", fillOpacity: p.status === "reject" ? .25 : .9})
+      fillColor: catColor[p.category] || "#888", fillOpacity: p.status === "reject" ? .25 : .9, bubblingMouseEvents: false})
       .addTo(layer).bindTooltip(esc(p.name));
     m.on("click", () => select(p.id, {scroll: true}));
     if (sel) m.bringToFront();
@@ -177,6 +179,8 @@ function select(id, o = {}) {
   if (o.pan && p) map.setView([p.lat, p.lng], Math.max(map.getZoom(), 13));
   if (o.scroll) document.querySelector(`.poi[data-id="${id}"]`)?.scrollIntoView({block: "nearest"});
 }
+
+function deselect() { selectedId = null; render(); }
 
 function step(d) {
   const o = orderNow(); if (!o.length) return;
@@ -199,10 +203,11 @@ function renderDetail() {
   if (!p) { el.hidden = true; el.innerHTML = ""; return; }
   el.hidden = false; el.innerHTML = "";
   const base = $("#fBase").value;
-  const head = document.createElement("div");
-  head.innerHTML = `<div style="font-weight:600;font-size:15px">${esc(p.name)}${p.synced ? '<span class="tag synced">in Wanderlog</span>' : ""}</div>
+  const head = document.createElement("div"); head.style.position = "relative";
+  head.innerHTML = `<button id="closeDetail" title="Deselecteren (Esc)" style="position:absolute;right:0;top:0;padding:0 8px;font-size:16px;line-height:22px">×</button><div style="font-weight:600;font-size:15px;padding-right:32px">${esc(p.name)}${p.synced ? '<span class="tag synced">in Wanderlog</span>' : ""}</div>
     <small>${esc(p.address || "")}</small>
     <small>${base ? dist(p, base) + " km van " + esc(base) + " · " : ""}${p.sources.length}× genoemd${p.gmaps_url ? ` · <a target="_blank" href="${p.gmaps_url}">kaart</a>` : ""}</small>`;
+  head.querySelector("#closeDetail").onclick = deselect;
   const acts = document.createElement("div"); acts.className = "row acts";
   const keep = Object.assign(document.createElement("button"), {className: "keep" + (p.status === "keep" ? " on" : ""), textContent: p.status === "keep" ? "✓ Gehouden (klik om te herstellen)" : "Houden (k)"});
   keep.onclick = () => decide(p, p.status === "keep" ? "new" : "keep");
@@ -232,7 +237,7 @@ function renderDetail() {
     el.append(d);
   });
   const hint = document.createElement("small"); hint.style.marginTop = "8px";
-  hint.innerHTML = "Sneltoetsen: <kbd>↑</kbd><kbd>↓</kbd> navigeren · <kbd>k</kbd> houden · <kbd>x</kbd> afwijzen"; el.append(hint);
+  hint.innerHTML = "Sneltoetsen: <kbd>↑</kbd><kbd>↓</kbd> navigeren · <kbd>k</kbd> houden · <kbd>x</kbd> afwijzen · <kbd>Esc</kbd> deselecteren"; el.append(hint);
 }
 
 function row(p) {

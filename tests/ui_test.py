@@ -55,6 +55,12 @@ try:
         # embed uit
         pg.select_option("#fStatus", "active")
         pg.locator(".poi").first.click(); pg.locator("#detail label input").uncheck(); assert pg.locator("#detail iframe").count() == 0
+        # deselecteren: Esc, ×-knop, klik op lege kaart; markerklik selecteert (en deselecteert niet)
+        pg.locator(".poi").first.click(); assert pg.locator("#detail").is_visible()
+        pg.keyboard.press("Escape"); assert pg.locator("#detail").is_hidden() and pg.locator(".poi.sel").count() == 0
+        pg.locator(".poi").first.click(); pg.locator("#closeDetail").click(); assert pg.locator("#detail").is_hidden()
+        pg.locator("path.leaflet-interactive").first.click(force=True); assert pg.locator("#detail").is_visible(), "markerklik deselecteert ten onrechte"
+        pg.mouse.click(1400, 150); pg.wait_for_timeout(200); assert pg.locator("#detail").is_hidden() and pg.locator(".poi.sel").count() == 0
         assert not errs, errs
         pg.screenshot(path="/tmp/ui.png"); print("UI-TEST OK", status()); b.close()
 finally:

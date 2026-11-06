@@ -16,7 +16,8 @@ UI: `http://<nas>:8140` (geen eigen login: alleen LAN of achter reverse proxy me
 ## Gebruik
 - Plak URL's (of de hele Joplin-notitie, zie `seed-urls.txt`) in het veld bovenaan → dedup op shortcode → parse op de achtergrond.
 - Posts met status `needs_text`/`error` onderaan: plak caption of noem de plek uit de video → "Parse".
-- Kaart: filter op status, categorie en afstand tot Miami/Key Largo; vink aan = `keep`; "Afwijzen" dempt de POI.
+- Review: klik op een marker of een naam in de lijst → het detailpaneel toont de POI, de bewijsregel uit de post en de Instagram-post zelf (embed, uit te zetten). **Houden** en **Afwijzen** springen door naar de volgende POI; sneltoetsen: ↑/↓ navigeren, `k` houden, `x` afwijzen.
+- Filter op status (standaard: alles behalve afgewezen), categorie en afstand tot een basispunt; een afgewezen POI blijft terug te vinden via het statusfilter en met **Herstel**.
 - Dubbele plekken (zelfde `place_id`, of <250 m + vergelijkbare naam) worden één POI met meerdere bronposts.
 
 ## Sync naar Wanderlog (rechtstreeks, zonder MCP)

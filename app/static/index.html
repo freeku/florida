@@ -20,14 +20,23 @@
   .row > * { flex:1; min-width:90px; }
   #list { overflow:auto; flex:1; }
   .cat { position:sticky; top:0; background:var(--bg); padding:5px 10px; font-weight:600; border-bottom:1px solid var(--bd); }
-  .poi { padding:8px 10px; border-bottom:1px solid #eceef1; display:grid; grid-template-columns: 24px 1fr; gap:8px; }
+  .poi { padding:8px 10px; border-bottom:1px solid #eceef1; display:grid; grid-template-columns: 24px 1fr; gap:8px; cursor:pointer; }
+  .poi:hover { background:#f3f6fb; }
+  .poi.sel { background:#eaf2ff; outline:2px solid var(--ac); outline-offset:-2px; }
+  #detail { padding:10px; border-bottom:2px solid var(--ac); background:#fff; max-height:58vh; overflow:auto; }
+  #detail small { color:#667; display:block; }
+  #detail .acts button { flex:1; }
+  #detail button.keep.on { background:#dff5e3; border-color:#3cb44b; }
+  #detail button.rej.on { background:#fde8e8; border-color:#e6194b; }
+  #detail .src { margin-top:8px; font-size:12px; }
+  #detail blockquote { margin:2px 0; padding-left:8px; border-left:3px solid var(--bd); color:#445; }
+  kbd { font:11px monospace; border:1px solid var(--bd); border-radius:3px; padding:0 3px; background:#fff; }
   .poi.reject { opacity:.45; }
   .poi .n { font-weight:600; cursor:pointer; }
   .poi small { color:#667; display:block; }
-  .poi select { width:auto; font-size:12px; padding:2px; margin-top:4px; }
-  .tag { font-size:11px; padding:1px 6px; border-radius:10px; background:#e8eefc; margin-left:4px; }
+    .tag { font-size:11px; padding:1px 6px; border-radius:10px; background:#e8eefc; margin-left:4px; }
   .tag.synced { background:#dff5e3; }
-  .posts { padding:8px 10px; font-size:12px; border-top:1px solid var(--bd); max-height:40vh; overflow:auto; background:var(--bg); }
+  .posts { padding:8px 10px; font-size:12px; border-top:1px solid var(--bd); max-height:25vh; overflow:auto; background:var(--bg); }
   .posts textarea { height:46px; margin-top:4px; }
   #msg { font-size:12px; color:#555; margin-top:4px; min-height:16px; }
 </style>
@@ -37,20 +46,24 @@
   <header>
     <h1>Florida POI's <span id="counts" style="font-weight:400;color:#667"></span></h1>
     <textarea id="urls" rows="2" placeholder="Plak Instagram-URL's (één of meer)…"></textarea>
-    <div class="row"><button class="primary" id="add">Toevoegen &amp; parsen</button><button id="refresh">Ververs</button><button id="retry" title="Zet posts met status error opnieuw in de wachtrij">Mislukte opnieuw</button></div>
-    <div class="row"><button id="wlCheck">Wanderlog: controleer</button><button id="wlDry">Proefrun sync</button><button id="wlSync" class="primary">Sync naar Wanderlog</button></div>
-    <div class="row"><button id="wlRemDry">Proefrun verwijderen</button><button id="wlRem">Verwijder uitgevinkte uit Wanderlog</button></div>
+    <div class="row"><button class="primary" id="add">Toevoegen &amp; parsen</button></div>
     <div id="msg"></div>
-    <pre id="syncOut" style="font-size:11px;white-space:pre-wrap;margin:4px 0 0;max-height:22vh;overflow:auto"></pre>
     <div class="row">
-      <select id="fStatus"><option value="">Alle statussen</option><option value="new">Nieuw</option><option value="keep">Houden</option><option value="reject">Afgewezen</option></select>
+      <select id="fStatus"><option value="active">Alle behalve afgewezen</option><option value="">Alle statussen</option><option value="new">Nieuw</option><option value="keep">Houden</option><option value="reject">Afgewezen</option></select>
       <select id="fCat"><option value="">Alle categorieën</option></select>
     </div>
     <div class="row">
       <label style="flex:2">Max. afstand tot <select id="fBase" style="width:auto;display:inline"></select></label>
       <input type="number" id="fKm" value="80" min="1"> <span style="flex:0">km</span>
     </div>
+    <details id="tools" style="margin-top:8px"><summary>Wanderlog &amp; beheer</summary>
+      <div class="row"><button id="refresh">Ververs</button><button id="retry" title="Zet posts met status error opnieuw in de wachtrij">Mislukte opnieuw</button></div>
+      <div class="row"><button id="wlCheck">Wanderlog: controleer</button><button id="wlDry">Proefrun sync</button><button id="wlSync" class="primary">Sync naar Wanderlog</button></div>
+      <div class="row"><button id="wlRemDry">Proefrun verwijderen</button><button id="wlRem">Verwijder uitgevinkte uit Wanderlog</button></div>
+      <pre id="syncOut" style="font-size:11px;white-space:pre-wrap;margin:4px 0 0;max-height:22vh;overflow:auto"></pre>
+    </details>
   </header>
+  <div id="detail" hidden></div>
   <div id="list"></div>
   <div class="posts" id="posts"></div>
 </div>
@@ -59,7 +72,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const COLORS = ["#e6194b","#3cb44b","#4363d8","#f58231","#911eb4","#008080","#9a6324","#808000","#000075"];
-let cfg, pois = [], markers = {}, map, layer, catColor = {};
+let cfg, pois = [], markers = {}, map, layer, catColor = {}, selectedId = null;
+let embedOn = true; try { embedOn = localStorage.getItem("embedOn") !== "0"; } catch (e) {}
 
 const $ = s => document.querySelector(s);
 const api = (p, o) => fetch(p, o).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }));
@@ -76,6 +90,7 @@ async function init() {
   ["fStatus","fCat","fBase","fKm"].forEach(id => $("#"+id).addEventListener("input", render));
   $("#refresh").onclick = load;
   const wl = async (url, opts, label) => {
+    $("#tools").open = true;
     $("#syncOut").textContent = label + "…";
     try {
       const r = await api(url, opts);
@@ -96,6 +111,14 @@ async function init() {
     $("#msg").textContent = `${r.new} nieuw, ${r.duplicates} al bekend. Parsen draait op de achtergrond…`;
     $("#urls").value = ""; setTimeout(load, 4000); setTimeout(load, 12000);
   };
+  document.addEventListener("keydown", e => {
+    if (e.target.closest("input,select,textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
+    const p = pois.find(x => x.id === selectedId);
+    if (e.key === "ArrowDown") { e.preventDefault(); step(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); step(-1); }
+    else if (p && e.key === "k") decide(p, p.status === "keep" ? "new" : "keep");
+    else if (p && e.key === "x") decide(p, p.status === "reject" ? "new" : "reject");
+  });
   await load();
 }
 
@@ -115,42 +138,113 @@ function visible(p) {
   const st = $("#fStatus").value, cat = $("#fCat").value, base = $("#fBase").value;
   const max = parseFloat($("#fKm").value) || 1e9;
   const d = dist(p, base);
-  return (!st || p.status === st) && (!cat || p.category === cat) && (d === null || d <= max);
+  const stOk = st === "active" ? p.status !== "reject" : (!st || p.status === st);
+  return stOk && (!cat || p.category === cat) && (d === null || d <= max);
 }
+
+function groups() {
+  const byCat = {};
+  pois.filter(visible).forEach(p => (byCat[p.category] ||= []).push(p));
+  return Object.keys(byCat).sort().map(c => [c, byCat[c]]);
+}
+const orderNow = () => groups().flatMap(([, ps]) => ps.map(p => p.id));
 
 function render() {
   layer.clearLayers(); markers = {};
-  const vis = pois.filter(visible);
-  $("#counts").textContent = `(${vis.length}/${pois.length} · ${pois.filter(p=>p.status==="keep").length} gehouden)`;
-  const byCat = {};
-  vis.forEach(p => (byCat[p.category] ||= []).push(p));
-  const list = $("#list"); list.innerHTML = "";
-  Object.keys(byCat).sort().forEach(cat => {
-    const h = document.createElement("div"); h.className = "cat"; h.textContent = `${cat} (${byCat[cat].length})`; list.append(h);
-    byCat[cat].forEach(p => list.append(row(p)));
+  const gs = groups(), vis = gs.flatMap(([, ps]) => ps);
+  $("#counts").textContent = `(${vis.length}/${pois.length} · ${pois.filter(p => p.status === "keep").length} gehouden)`;
+  const list = $("#list"), top = list.scrollTop; list.innerHTML = "";
+  gs.forEach(([cat, ps]) => {
+    const h = document.createElement("div"); h.className = "cat"; h.textContent = `${cat} (${ps.length})`; list.append(h);
+    ps.forEach(p => list.append(row(p)));
   });
+  list.scrollTop = top;
   vis.forEach(p => {
-    const m = L.circleMarker([p.lat,p.lng], {radius:p.status==="keep"?10:7, color:"#fff", weight:1.5, fillColor:catColor[p.category]||"#888", fillOpacity:p.status==="reject"?.25:.9})
-      .addTo(layer).bindPopup(`<b>${esc(p.name)}</b><br>${esc(p.category)}<br>${p.sources.map(s=>`<a target=_blank href="${s.url}">post</a>`).join(" · ")}${p.gmaps_url?` · <a target=_blank href="${p.gmaps_url}">kaart</a>`:""}`);
+    const sel = p.id === selectedId;
+    const m = L.circleMarker([p.lat, p.lng], {radius: sel ? 13 : p.status === "keep" ? 10 : 7, color: sel ? "#000" : "#fff", weight: sel ? 3 : 1.5,
+      fillColor: catColor[p.category] || "#888", fillOpacity: p.status === "reject" ? .25 : .9})
+      .addTo(layer).bindTooltip(esc(p.name));
+    m.on("click", () => select(p.id, {scroll: true}));
+    if (sel) m.bringToFront();
     markers[p.id] = m;
   });
+  renderDetail();
+}
+
+function select(id, o = {}) {
+  selectedId = id; render();
+  const p = pois.find(x => x.id === id);
+  if (o.pan && p) map.setView([p.lat, p.lng], Math.max(map.getZoom(), 13));
+  if (o.scroll) document.querySelector(`.poi[data-id="${id}"]`)?.scrollIntoView({block: "nearest"});
+}
+
+function step(d) {
+  const o = orderNow(); if (!o.length) return;
+  const i = o.indexOf(selectedId);
+  select(o[Math.min(Math.max(i + d, 0), o.length - 1)] ?? o[0], {pan: true, scroll: true});
+}
+
+// Beslissing nemen: bij 'houden'/'afwijzen' door naar de volgende POI in de lijst
+async function decide(p, status) {
+  const before = orderNow(), i = before.indexOf(p.id);
+  await patch(p.id, {status}); p.status = status;
+  if (status === "new") return select(p.id, {scroll: true});
+  const after = orderNow();
+  const next = after.includes(p.id) ? (after[after.indexOf(p.id) + 1] ?? p.id) : (after[Math.min(i, after.length - 1)] ?? null);
+  select(next, {pan: next != null, scroll: true});
+}
+
+function renderDetail() {
+  const el = $("#detail"), p = pois.find(x => x.id === selectedId);
+  if (!p) { el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false; el.innerHTML = "";
+  const base = $("#fBase").value;
+  const head = document.createElement("div");
+  head.innerHTML = `<div style="font-weight:600;font-size:15px">${esc(p.name)}${p.synced ? '<span class="tag synced">in Wanderlog</span>' : ""}</div>
+    <small>${esc(p.address || "")}</small>
+    <small>${base ? dist(p, base) + " km van " + esc(base) + " · " : ""}${p.sources.length}× genoemd${p.gmaps_url ? ` · <a target="_blank" href="${p.gmaps_url}">kaart</a>` : ""}</small>`;
+  const acts = document.createElement("div"); acts.className = "row acts";
+  const keep = Object.assign(document.createElement("button"), {className: "keep" + (p.status === "keep" ? " on" : ""), textContent: p.status === "keep" ? "✓ Gehouden (klik om te herstellen)" : "Houden (k)"});
+  keep.onclick = () => decide(p, p.status === "keep" ? "new" : "keep");
+  const rej = Object.assign(document.createElement("button"), {className: "rej" + (p.status === "reject" ? " on" : ""), textContent: p.status === "reject" ? "Afgewezen: Herstel" : "Afwijzen (x)"});
+  rej.onclick = () => decide(p, p.status === "reject" ? "new" : "reject");
+  acts.append(keep, rej);
+  const nav = document.createElement("div"); nav.className = "row";
+  const sel = document.createElement("select"); sel.style.flex = "2";
+  cfg.categories.forEach(c => sel.add(new Option(c, c, false, c === p.category)));
+  sel.onchange = async () => { p.category = sel.value; await patch(p.id, {category: sel.value}); render(); };
+  const prev = Object.assign(document.createElement("button"), {textContent: "↑", title: "Vorige (pijl omhoog)"}); prev.style.flex = "0"; prev.onclick = () => step(-1);
+  const next = Object.assign(document.createElement("button"), {textContent: "↓", title: "Volgende (pijl omlaag)"}); next.style.flex = "0"; next.onclick = () => step(1);
+  nav.append(sel, prev, next);
+  el.append(head, acts, nav);
+  const emb = document.createElement("label"); emb.style.cssText = "display:block;margin-top:8px;font-size:12px";
+  const cb = Object.assign(document.createElement("input"), {type: "checkbox", checked: embedOn});
+  cb.onchange = () => { embedOn = cb.checked; try { localStorage.setItem("embedOn", embedOn ? "1" : "0"); } catch (e) {} renderDetail(); };
+  emb.append(cb, " Toon de post hier"); el.append(emb);
+  p.sources.forEach(s => {
+    const d = document.createElement("div"); d.className = "src";
+    d.innerHTML = `${s.evidence ? `<blockquote>${esc(s.evidence)}</blockquote>` : ""}<a target="_blank" href="${s.url}">Open post op Instagram</a>`;
+    if (embedOn) {
+      const f = document.createElement("iframe"); f.loading = "lazy"; f.src = `https://www.instagram.com/p/${s.shortcode}/embed/`;
+      f.style.cssText = "width:100%;height:520px;border:1px solid var(--bd);border-radius:6px;margin-top:6px";
+      d.append(f);
+    }
+    el.append(d);
+  });
+  const hint = document.createElement("small"); hint.style.marginTop = "8px";
+  hint.innerHTML = "Sneltoetsen: <kbd>↑</kbd><kbd>↓</kbd> navigeren · <kbd>k</kbd> houden · <kbd>x</kbd> afwijzen"; el.append(hint);
 }
 
 function row(p) {
-  const d = document.createElement("div"); d.className = "poi " + p.status;
-  const cb = Object.assign(document.createElement("input"), {type:"checkbox", checked:p.status==="keep"});
-  cb.onchange = async () => { p.status = cb.checked ? "keep" : "new"; await patch(p.id, {status:p.status}); render(); };
+  const d = document.createElement("div"); d.className = "poi " + p.status + (p.id === selectedId ? " sel" : ""); d.dataset.id = p.id;
+  const cb = Object.assign(document.createElement("input"), {type: "checkbox", checked: p.status === "keep"});
+  cb.onclick = e => e.stopPropagation();
+  cb.onchange = async () => { p.status = cb.checked ? "keep" : "new"; await patch(p.id, {status: p.status}); render(); };
   const body = document.createElement("div");
-  body.innerHTML = `<span class="n">${esc(p.name)}</span>${p.synced?'<span class="tag synced">in Wanderlog</span>':""}
-    <small>${esc(p.address||"")}</small>
+  body.innerHTML = `<span class="n">${esc(p.name)}</span>${p.synced ? '<span class="tag synced">in Wanderlog</span>' : ""}
+    <small>${esc(p.address || "")}</small>
     <small>${$("#fBase").value ? dist(p, $("#fBase").value) + " km van " + $("#fBase").value + " · " : ""}${p.sources.length}× genoemd</small>`;
-  const sel = document.createElement("select");
-  cfg.categories.forEach(c => sel.add(new Option(c, c, false, c === p.category)));
-  sel.onchange = async () => { p.category = sel.value; await patch(p.id, {category:sel.value}); render(); };
-  const rej = document.createElement("button"); rej.textContent = p.status==="reject" ? "Herstel" : "Afwijzen"; rej.style.cssText = "margin-left:6px;font-size:12px;padding:2px 6px";
-  rej.onclick = async () => { p.status = p.status==="reject" ? "new" : "reject"; await patch(p.id, {status:p.status}); render(); };
-  body.append(sel, rej);
-  body.querySelector(".n").onclick = () => { map.setView([p.lat,p.lng], 15); markers[p.id]?.openPopup(); };
+  d.onclick = () => select(p.id, {pan: true});
   d.append(cb, body); return d;
 }
 

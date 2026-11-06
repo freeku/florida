@@ -127,8 +127,8 @@ STAYS = [
     {"name": "Hampton Inn & Suites Orlando Airport", "query": "Hampton Inn & Suites Orlando Airport at Gateway Village, 5460 Gateway Village Cir, Orlando, FL 32812", "dates": "20–21 dec"},
     {"name": "BLEU Beach Resort", "query": "BLEU Beach Resort, 501 N Miramar Ave, Indialantic, FL 32903", "dates": "21–22 dec"},
     {"name": "Kenmore Village Hotel", "query": "Kenmore Village Hotel, 1050 Washington Ave, Miami Beach, FL 33139", "dates": "22–24 dec"},
-    {"name": "Baker's Cay Resort", "query": "Baker's Cay Resort, 97000 Overseas Hwy, Key Largo, FL 33037", "dates": "24–26 dec"},
-    {"name": "Verblijf Miami", "query": "3450 SW 23rd Terrace, Miami, FL 33145", "dates": "26 dec – 1 jan"},
+    {"name": "Reefhouse Resort", "query": "Reefhouse Resort, 103800 Overseas Hwy, Key Largo, FL 33037", "dates": "24–26 dec"},
+    {"name": "Airbnb Miami", "query": "3450 SW 23rd Terrace, Miami, FL 33145", "dates": "26 dec – 1 jan"},
 ]
 
 

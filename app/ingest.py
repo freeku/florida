@@ -25,6 +25,7 @@ BASES = {
     "Key Largo": KEY_LARGO,
     "Kennedy Space Center": (28.5729, -80.6490),
     "Cocoa Beach": (28.3200, -80.6076),
+    "Indialantic (overnachting)": (28.0870, -80.5650),
     "Orlando": (28.5383, -81.3792),
 }
 

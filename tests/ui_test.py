@@ -24,6 +24,7 @@ try:
         pg.route("**/tile.openstreetmap.org/**", lambda r: r.abort())
         pg.route("**/instagram.com/**", lambda r: r.fulfill(body="<html>embed</html>", content_type="text/html"))
         pg.goto("http://127.0.0.1:8150/"); pg.wait_for_selector(".poi")
+        assert pg.locator("#fBase").input_value() == "__any__"  # standaard: alle locaties
         pg.fill("#fKm", "9999")  # Tampa ook binnen filter
         n = lambda: pg.locator(".poi").count()
         assert n() == 4, n()
@@ -55,6 +56,12 @@ try:
         # embed uit
         pg.select_option("#fStatus", "active")
         pg.locator(".poi").first.click(); pg.locator("#detail label input").uncheck(); assert pg.locator("#detail iframe").count() == 0
+        # basisfilter: standaard 'Alle locaties'; Tampa (ver van alle basispunten) valt af, '(geen filter)' toont alles
+        pg.select_option("#fStatus", ""); pg.select_option("#fBase", "__any__"); pg.fill("#fKm", "80")
+        assert pg.locator("#fBase").input_value() == "__any__" and n() == 3, n()
+        assert "km van" in pg.locator(".poi").first.inner_text()
+        pg.select_option("#fBase", ""); assert n() == 4
+        pg.select_option("#fBase", "__any__"); pg.fill("#fKm", "9999"); pg.select_option("#fStatus", "active")
         # deselecteren: Esc, ×-knop, klik op lege kaart; markerklik selecteert (en deselecteert niet)
         pg.locator(".poi").first.click(); assert pg.locator("#detail").is_visible()
         pg.keyboard.press("Escape"); assert pg.locator("#detail").is_hidden() and pg.locator(".poi.sel").count() == 0

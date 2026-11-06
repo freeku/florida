@@ -81,6 +81,7 @@ const patch = (id, body) => api(`/api/pois/${id}`, {method:"PATCH", headers:{"Co
 
 async function init() {
   cfg = await api("/api/config");
+  $("#fBase").add(new Option("Alle locaties (dichtstbijzijnde)", "__any__"));
   Object.keys(cfg.bases).forEach(b => $("#fBase").add(new Option(b, b)));
   $("#fBase").add(new Option("(geen filter)", ""));
   cfg.categories.forEach((c,i) => { catColor[c] = COLORS[i % COLORS.length]; $("#fCat").add(new Option(c, c)); });
@@ -136,10 +137,21 @@ function dist(p, base) {
   return Math.round(2 * 6371 * Math.asin(Math.sqrt(a)) * 10) / 10;
 }
 
+// Afstand tot het gekozen basispunt; bij "Alle locaties" tot het dichtstbijzijnde basispunt
+function nearest(p, base) {
+  if (base === "__any__") {
+    let best = null;
+    for (const b of Object.keys(cfg.bases)) { const d = dist(p, b); if (best === null || d < best.d) best = {d, name: b}; }
+    return best;
+  }
+  const d = dist(p, base); return d === null ? null : {d, name: base};
+}
+const kmText = p => { const n = nearest(p, $("#fBase").value); return n ? `${n.d} km van ${esc(n.name)} · ` : ""; };
+
 function visible(p) {
   const st = $("#fStatus").value, cat = $("#fCat").value, base = $("#fBase").value;
   const max = parseFloat($("#fKm").value) || 1e9;
-  const d = dist(p, base);
+  const n = nearest(p, base), d = n ? n.d : null;
   const stOk = st === "active" ? p.status !== "reject" : (!st || p.status === st);
   return stOk && (!cat || p.category === cat) && (d === null || d <= max);
 }
@@ -206,7 +218,7 @@ function renderDetail() {
   const head = document.createElement("div"); head.style.position = "relative";
   head.innerHTML = `<button id="closeDetail" title="Deselecteren (Esc)" style="position:absolute;right:0;top:0;padding:0 8px;font-size:16px;line-height:22px">×</button><div style="font-weight:600;font-size:15px;padding-right:32px">${esc(p.name)}${p.synced ? '<span class="tag synced">in Wanderlog</span>' : ""}</div>
     <small>${esc(p.address || "")}</small>
-    <small>${base ? dist(p, base) + " km van " + esc(base) + " · " : ""}${p.sources.length}× genoemd${p.gmaps_url ? ` · <a target="_blank" href="${p.gmaps_url}">kaart</a>` : ""}</small>`;
+    <small>${kmText(p)}${p.sources.length}× genoemd${p.gmaps_url ? ` · <a target="_blank" href="${p.gmaps_url}">kaart</a>` : ""}</small>`;
   head.querySelector("#closeDetail").onclick = deselect;
   const acts = document.createElement("div"); acts.className = "row acts";
   const keep = Object.assign(document.createElement("button"), {className: "keep" + (p.status === "keep" ? " on" : ""), textContent: p.status === "keep" ? "✓ Gehouden (klik om te herstellen)" : "Houden (k)"});
@@ -248,7 +260,7 @@ function row(p) {
   const body = document.createElement("div");
   body.innerHTML = `<span class="n">${esc(p.name)}</span>${p.synced ? '<span class="tag synced">in Wanderlog</span>' : ""}
     <small>${esc(p.address || "")}</small>
-    <small>${$("#fBase").value ? dist(p, $("#fBase").value) + " km van " + $("#fBase").value + " · " : ""}${p.sources.length}× genoemd</small>`;
+    <small>${kmText(p)}${p.sources.length}× genoemd</small>`;
   d.onclick = () => select(p.id, {pan: true});
   d.append(cb, body); return d;
 }

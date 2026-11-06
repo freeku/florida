@@ -111,6 +111,8 @@
   .postsBody ul { margin:4px 0 4px 18px; padding:0; }
   .postsBody pre { white-space:pre-wrap; font-size:11px; max-height:120px; overflow:auto; background:#fff; padding:6px; border-radius:6px; border:1px solid var(--line); }
 
+  .stay { background:#1c2330; color:#fff; border:2px solid #fff; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 4px rgba(0,0,0,.4); }
+  .stay svg.i { width:16px; height:16px; }
   .leaflet-tooltip { font:12.5px system-ui, sans-serif; border-radius:6px; }
 
   @media (max-width:800px) { body { grid-template-columns:1fr; grid-template-rows:55vh 45vh; height:auto; } #map { order:-1; height:45vh; } #side { height:auto; } }
@@ -184,6 +186,7 @@ const ICONS = {
   shield:'<path d="M12 3 5 6v6c0 4.4 3 7.6 7 9 4-1.4 7-4.6 7-9V6z"/><path d="m9 12 2 2 4-4"/>',
   redo:'<path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/>',
   ext:'<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  home:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/>',
   map:'<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/>'
 };
 const ic = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
@@ -205,6 +208,9 @@ async function init() {
   map = L.map("map", {zoomControl:true}).setView([25.77,-80.2], 10);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:"© OpenStreetMap"}).addTo(map);
   layer = L.layerGroup().addTo(map);
+  api("/api/stays").then(ss => ss.forEach(s => L.marker([s.lat, s.lng], {zIndexOffset: 1000, bubblingMouseEvents: false,
+    icon: L.divIcon({className: "", html: `<div class="stay">${ic("home")}</div>`, iconSize: [30, 30], iconAnchor: [15, 15]})})
+    .addTo(map).bindTooltip(`${esc(s.name)} · ${esc(s.dates)}`))).catch(() => {});
   map.on("click", () => { if (selectedId != null) deselect(); });
   ["fStatus","fCat","fBase","fKm"].forEach(id => $("#"+id).addEventListener("input", render));
   $("#refresh").onclick = load;

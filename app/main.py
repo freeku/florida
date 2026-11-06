@@ -48,6 +48,26 @@ def config():
             "bases": ingest.BASES}
 
 
+@app.get("/api/stays")
+def stays():
+    """Verblijven met coördinaten; eenmalig opgezocht en bewaard in sqlite."""
+    db.run("CREATE TABLE IF NOT EXISTS stays(name TEXT PRIMARY KEY, lat REAL, lng REAL)")
+    out = []
+    for s in ingest.STAYS:
+        r = db.one("SELECT lat,lng FROM stays WHERE name=?", (s["name"],))
+        if not r:
+            try:
+                pl = ingest.resolve_place(s["query"], "")
+            except Exception:
+                pl = None
+            if not pl:
+                continue
+            db.run("INSERT OR REPLACE INTO stays VALUES(?,?,?)", (s["name"], pl["lat"], pl["lng"]))
+            r = {"lat": pl["lat"], "lng": pl["lng"]}
+        out.append({"name": s["name"], "dates": s["dates"], "lat": r["lat"], "lng": r["lng"]})
+    return out
+
+
 @app.get("/api/pois")
 def pois():
     items = db.rows("SELECT * FROM pois ORDER BY category, name")

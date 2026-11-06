@@ -38,15 +38,18 @@ try:
         pg.locator("path.leaflet-interactive").first.click(force=True)
         sel = pg.locator(".poi.sel").inner_text(); print("marker-klik selecteert:", sel.split("\n")[0])
         assert pg.locator(".poi.sel").count() == 1
-        # afwijzen via paneel: verdwijnt uit lijst (filter 'alle behalve afgewezen'), volgende wordt geselecteerd
+        # afwijzen via paneel: selectie blijft op dezelfde POI (blijft zichtbaar), pas bij doorlopen verdwijnt hij
         pg.locator(".poi", has_text="Venetian").click()
         before = n(); pg.locator("#detail button.rej").click(); pg.wait_for_timeout(400)
-        assert n() == before - 1 and status()["Venetian Pool"] == "reject", status()
-        nxt = pg.locator(".poi.sel").inner_text().split("\n")[0]; print("na afwijzen geselecteerd:", nxt)
-        assert pg.locator(".poi.sel").count() == 1 and "Venetian" not in nxt
-        # sneltoetsen
+        assert status()["Venetian Pool"] == "reject", status()
+        assert n() == before and "Venetian" in pg.locator(".poi.sel").inner_text() and "Herstel" in pg.locator("#detail button.rej").inner_text()
+        pg.keyboard.press("ArrowDown"); pg.wait_for_timeout(300)
+        nxt = pg.locator(".poi.sel").inner_text().split("\n")[0]; print("na doorlopen geselecteerd:", nxt)
+        assert n() == before - 1 and "Venetian" not in nxt and pg.locator(".poi.sel").count() == 1
+        # sneltoetsen op de nu geselecteerde POI
         pg.keyboard.press("k"); pg.wait_for_timeout(400)
-        assert list(status().values()).count("keep") == 1
+        assert list(status().values()).count("keep") == 1 and pg.locator(".poi.sel").count() == 1
+        pg.keyboard.press("k"); pg.wait_for_timeout(300)  # terugdraaien
         pg.keyboard.press("x"); pg.wait_for_timeout(400)
         assert list(status().values()).count("reject") == 2, status()
         # afgewezen bekijken + herstellen

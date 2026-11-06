@@ -158,7 +158,7 @@ function visible(p) {
 
 function groups() {
   const byCat = {};
-  pois.filter(visible).forEach(p => (byCat[p.category] ||= []).push(p));
+  pois.filter(p => visible(p) || p.id === selectedId).forEach(p => (byCat[p.category] ||= []).push(p));
   return Object.keys(byCat).sort().map(c => [c, byCat[c]]);
 }
 const orderNow = () => groups().flatMap(([, ps]) => ps.map(p => p.id));
@@ -200,14 +200,10 @@ function step(d) {
   select(o[Math.min(Math.max(i + d, 0), o.length - 1)] ?? o[0], {pan: true, scroll: true});
 }
 
-// Beslissing nemen: bij 'houden'/'afwijzen' door naar de volgende POI in de lijst
+// Beslissing nemen: de selectie blijft op deze POI (die zichtbaar blijft tot je naar een andere gaat)
 async function decide(p, status) {
-  const before = orderNow(), i = before.indexOf(p.id);
   await patch(p.id, {status}); p.status = status;
-  if (status === "new") return select(p.id, {scroll: true});
-  const after = orderNow();
-  const next = after.includes(p.id) ? (after[after.indexOf(p.id) + 1] ?? p.id) : (after[Math.min(i, after.length - 1)] ?? null);
-  select(next, {pan: next != null, scroll: true});
+  select(p.id, {scroll: true});
 }
 
 function renderDetail() {

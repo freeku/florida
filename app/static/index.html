@@ -175,9 +175,9 @@
     </div>
 
     <details class="acc" id="addBox">
-      <summary><span data-ic="plus"></span>Instagram-posts toevoegen<span class="chev" data-ic="chev"></span></summary>
+      <summary><span data-ic="plus"></span>Posts toevoegen<span class="chev" data-ic="chev"></span></summary>
       <div class="accBody">
-        <textarea id="urls" rows="3" placeholder="Plak één of meer Instagram-URL's"></textarea>
+        <textarea id="urls" rows="3" placeholder="Plak Instagram- of TikTok-URL's"></textarea>
         <button class="btn primary" id="add"><span data-ic="plus"></span>Toevoegen &amp; parsen</button>
         <div id="msg" class="msg"></div>
       </div>
@@ -219,10 +219,10 @@
   <div id="posts"></div>
 </div>
 <div id="map"></div>
-<button id="fab" aria-label="Instagram-posts toevoegen" title="Instagram-posts toevoegen" data-ic="plus"></button>
+<button id="fab" aria-label="Posts toevoegen" title="Posts toevoegen" data-ic="plus"></button>
 <dialog id="addModal">
-  <h2>Instagram-posts toevoegen</h2>
-  <textarea id="mUrls" class="field" rows="4" placeholder="Plak één of meer Instagram-URL's"></textarea>
+  <h2>Posts toevoegen</h2>
+  <textarea id="mUrls" class="field" rows="4" placeholder="Plak Instagram- of TikTok-URL's"></textarea>
   <div class="msg" id="mMsg" style="margin:8px 0 0"></div>
   <div class="mActs" style="margin-top:12px"><button class="btn" id="mCancel">Annuleer</button><button class="btn primary" id="mAdd" data-ic="plus">Toevoegen &amp; parsen</button></div>
 </dialog>
@@ -376,7 +376,7 @@ function render() {
   setBadge("#wlSync", pois.filter(p => p.status === "keep" && !p.synced).length);
   setBadge("#wlRem", pois.filter(p => p.synced && p.status !== "keep").length);
   const list = $("#list"), top = list.scrollTop; list.innerHTML = "";
-  if (!vis.length) list.innerHTML = `<div class="empty">${pois.length ? "Geen POI's met deze filters." : "Nog geen POI's. Voeg Instagram-posts toe."}</div>`;
+  if (!vis.length) list.innerHTML = `<div class="empty">${pois.length ? "Geen POI's met deze filters." : "Nog geen POI's. Voeg posts toe."}</div>`;
   gs.forEach(([cat, ps]) => {
     const h = document.createElement("div"); h.className = "cat";
     h.innerHTML = `<i style="background:${catColor[cat] || "#888"}"></i>${esc(cat)}<span class="n">${ps.length}</span>`; list.append(h);
@@ -451,9 +451,9 @@ function renderDetail() {
   el.querySelector(".embedToggle input").onchange = e => { embedOn = e.target.checked; try { localStorage.setItem("embedOn", embedOn ? "1" : "0"); } catch (err) {} renderDetail(); };
   p.sources.forEach(s => {
     const d = document.createElement("div"); d.className = "src";
-    d.innerHTML = `${s.evidence ? `<blockquote>${esc(s.evidence)}</blockquote>` : ""}<a class="meta" target="_blank" href="${s.url}">Open op Instagram</a>`;
+    d.innerHTML = `${s.evidence ? `<blockquote>${esc(s.evidence)}</blockquote>` : ""}<a class="meta" target="_blank" href="${s.url}">Open op ${s.shortcode.startsWith("tt") ? "TikTok" : "Instagram"}</a>`;
     if (embedOn) {
-      const f = document.createElement("iframe"); f.loading = "lazy"; f.src = `https://www.instagram.com/p/${s.shortcode}/embed/`;
+      const f = document.createElement("iframe"); f.loading = "lazy"; f.src = s.shortcode.startsWith("tt_") ? `https://www.tiktok.com/embed/v2/${s.shortcode.slice(3)}` : `https://www.instagram.com/p/${s.shortcode}/embed/`;
       d.append(f);
     }
     el.append(d);

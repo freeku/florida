@@ -73,9 +73,10 @@ def pois():
     items = db.rows("SELECT * FROM pois ORDER BY category, name")
     src = db.rows("SELECT poi_id, shortcode, confidence, evidence FROM poi_sources")
     by = {}
+    urls = {r["shortcode"]: r["url"] for r in db.rows("SELECT shortcode,url FROM posts")}
     for s in src:
         by.setdefault(s["poi_id"], []).append(
-            {**s, "url": f"https://www.instagram.com/p/{s['shortcode']}/"})
+            {**s, "url": urls.get(s["shortcode"]) or f"https://www.instagram.com/p/{s['shortcode']}/"})
     for p in items:
         p["sources"] = by.get(p["id"], [])
     return items
@@ -104,11 +105,13 @@ def patch_poi(poi_id: int, body: PoiPatch):
 
 @app.post("/api/posts")
 def add_posts(body: UrlsIn, bg: BackgroundTasks):
-    codes = ingest.shortcodes_from_text(body.text)
+    refs = ingest.refs_from_text(body.text)
+    codes = [r["key"] for r in refs]
     new = []
-    for sc in codes:
+    for ref in refs:
+        sc = ref["key"]
         if not db.one("SELECT 1 AS x FROM posts WHERE shortcode=?", (sc,)):
-            db.run("INSERT INTO posts(shortcode,url) VALUES(?,?)", (sc, f"https://www.instagram.com/p/{sc}/"))
+            db.run("INSERT INTO posts(shortcode,url) VALUES(?,?)", (sc, ref["url"]))
             new.append(sc)
             bg.add_task(ingest.process, sc)
     return {"found": len(codes), "new": len(new), "duplicates": len(codes) - len(new)}

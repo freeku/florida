@@ -42,6 +42,45 @@ def shortcodes_from_text(text: str):
     return out
 
 
+TT_VIDEO_RE = re.compile(r"tiktok\.com/(?:@[\w.\-]+/video|embed/v2|v)/(\d+)")
+TT_SHORT_RE = re.compile(r"(?:(?:vm|vt)\.tiktok\.com/|tiktok\.com/t/)([A-Za-z0-9]+)")
+UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"}
+
+
+def _resolve_tiktok_short(url: str) -> tuple[str, str] | None:
+    """Volgt de redirect van een korte TikTok-link: (video-ID, volledige URL). None als dat niet lukt."""
+    try:
+        r = httpx.get(url, follow_redirects=True, timeout=8, headers=UA)
+        m = TT_VIDEO_RE.search(str(r.url))
+        return (m.group(1), str(r.url).split("?")[0]) if m else None
+    except Exception as e:
+        print(f"[ingest] short-link {url} niet op te lossen: {e}")
+        return None
+
+
+def refs_from_text(text: str) -> list[dict]:
+    """Alle ondersteunde post-URL's in een tekst: [{key, url}]. Instagram: key=shortcode; TikTok: key='tt_<video-id>'."""
+    out, seen = [], set()
+
+    def add(key, url):
+        if key not in seen:
+            seen.add(key)
+            out.append({"key": key, "url": url})
+    for sc in shortcodes_from_text(text):
+        add(sc, f"https://www.instagram.com/p/{sc}/")
+    for m in re.finditer(r"https?://[^\s<>\"')]*tiktok\.com/[^\s<>\"')]*", text):
+        u = m.group(0).rstrip(".,;")
+        v = TT_VIDEO_RE.search(u)
+        if v:
+            add(f"tt_{v.group(1)}", u.split("?")[0])
+            continue
+        sh = TT_SHORT_RE.search(u)
+        if sh:
+            res = _resolve_tiktok_short(u)
+            add(f"tt_{res[0]}" if res else f"tts_{sh.group(1)}", res[1] if res else u.split("?")[0])
+    return out
+
+
 def haversine_km(a, b):
     R = 6371.0
     la1, lo1, la2, lo2 = map(math.radians, (a[0], a[1], b[0], b[1]))
@@ -71,8 +110,22 @@ def fetch_post_text(shortcode: str) -> str | None:
         return None
 
 
+def fetch_tiktok_text(url: str) -> str | None:
+    """Caption + account via TikTok oEmbed (zonder login). Veel TikToks noemen de plek alleen in beeld/geluid -> dan needs_text."""
+    try:
+        r = httpx.get("https://www.tiktok.com/oembed", params={"url": url}, timeout=15, headers=UA)
+        r.raise_for_status()
+        j = r.json()
+        if not (j.get("title") or "").strip():
+            return None
+        return f"Account: @{j.get('author_unique_id') or j.get('author_name', '')}\nCaption: {j['title']}"
+    except Exception as e:
+        print(f"[ingest] tiktok oembed {url} mislukt: {e}")
+        return None
+
+
 # ---------- 2. Claude parse ----------
-SYSTEM = f"""Je haalt concrete, bezoekbare plekken uit Instagram-posts over Miami/Florida (reis van een gezin met twee jonge kinderen).
+SYSTEM = f"""Je haalt concrete, bezoekbare plekken uit social-mediaposts (Instagram of TikTok) over Miami/Florida (reis van een gezin met twee jonge kinderen).
 Geef UITSLUITEND een JSON-array. Elk item:
 {{"name": str, "city": str, "category": één van {CATEGORIES}, "confidence": 0..1, "evidence": korte letterlijke aanwijzing uit de tekst}}
 Regels: alleen specifieke plekken (geen 'Miami' of 'het strand' in het algemeen); zet de stad/regio erbij als die uit de tekst blijkt;
@@ -171,7 +224,7 @@ def process(shortcode: str):
     post = db.one("SELECT * FROM posts WHERE shortcode=?", (shortcode,))
     if not post:
         return
-    text = post["caption"] or fetch_post_text(shortcode)
+    text = post["caption"] or (fetch_tiktok_text(post["url"]) if shortcode.startswith("tt") else fetch_post_text(shortcode))
     if not text:
         db.run("UPDATE posts SET status='needs_text', error=NULL WHERE shortcode=?", (shortcode,))
         return

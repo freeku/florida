@@ -37,6 +37,12 @@ try:
         assert posted and "ZZZ" in posted[0] and "1 nieuw" in pg.locator("#mMsg").inner_text()
         pg.wait_for_timeout(1700); assert not pg.locator("#addModal").is_visible()
         # sheet openen, filters tonen
+        # veeg omhoog op de titelrij opent de sheet zonder dat de header meescrolt
+        pg.evaluate("""() => { const el = document.querySelector('.top'); const mk = y => new Touch({identifier:1, target:el, clientX:100, clientY:y});
+          el.dispatchEvent(new TouchEvent('touchstart', {touches:[mk(800)], changedTouches:[mk(800)], bubbles:true, cancelable:true}));
+          el.dispatchEvent(new TouchEvent('touchend', {touches:[], changedTouches:[mk(700)], bubbles:true, cancelable:true})); }""")
+        assert pg.evaluate("document.body.dataset.sheet") == "half" and pg.evaluate("document.querySelector('header').scrollTop") == 0
+        pg.tap("#grab"); assert pg.evaluate("document.body.dataset.sheet") == "peek"
         pg.tap("#grab"); assert pg.evaluate("document.body.dataset.sheet") == "half" and pg.locator(".poi").count() == 3
         pg.tap("#filtersBtn"); assert pg.locator(".filters").is_visible()
         pg.screenshot(path="/tmp/m3.png")

@@ -23,6 +23,13 @@ try:
         pg.route("**/unpkg.com/leaflet@1.9.4/dist/leaflet.css", lambda r: r.fulfill(path=LF + "leaflet.css", content_type="text/css"))
         pg.route("**/tile.openstreetmap.org/**", lambda r: r.abort())
         pg.route("**/instagram.com/**", lambda r: r.fulfill(body="<html>embed</html>", content_type="text/html"))
+        def mclick():  # klik op de eerste marker die echt in beeld staat (kaart pant/zoomt bij selectie)
+            loc = pg.locator("path.leaflet-interactive")
+            for i in range(loc.count()):
+                bb = loc.nth(i).bounding_box()
+                if bb and 430 < bb["x"] < 1450 and 10 < bb["y"] < 880:
+                    loc.nth(i).click(force=True); return
+            raise AssertionError("geen zichtbare marker")
         pg.goto("http://127.0.0.1:8150/"); pg.wait_for_selector(".poi")
         assert pg.locator("#fBase").input_value() == "__any__"  # standaard: alle locaties
         pg.fill("#fKm", "9999")  # Tampa ook binnen filter
@@ -35,7 +42,8 @@ try:
         assert pg.locator(".poi.sel").count() == 1 and pg.locator("#detail iframe").count() == 1
         assert "bewijs voor poi 2" in pg.locator("#detail").inner_text()
         # klik op marker -> selectie van die POI
-        pg.locator("path.leaflet-interactive").first.click(force=True)
+        pg.wait_for_timeout(600)  # pan-animatie afwachten
+        mclick()
         sel = pg.locator(".poi.sel").inner_text(); print("marker-klik selecteert:", sel.split("\n")[0])
         assert pg.locator(".poi.sel").count() == 1
         # afwijzen via paneel: selectie blijft op dezelfde POI (blijft zichtbaar), pas bij doorlopen verdwijnt hij
@@ -56,6 +64,10 @@ try:
         pg.select_option("#fStatus", "reject"); assert n() == 2
         pg.locator(".poi", has_text="Venetian").click(); pg.locator("#detail button.rej").click(); pg.wait_for_timeout(300)
         assert status()["Venetian Pool"] == "new"
+        # posts-overzicht: uitklappen toont dezelfde embed, POI-link selecteert de POI
+        pg.locator("#posts summary").first.click(); pg.locator("#posts .postsBody > details").first.locator("summary").click(); pg.wait_for_timeout(200)
+        assert pg.locator("#posts .pEmbed iframe").count() == 1 and "/embed" in pg.locator("#posts .pEmbed iframe").get_attribute("src")
+        pg.locator("#posts summary").first.click()  # paneel weer dicht
         # embed uit
         pg.select_option("#fStatus", "active")
         pg.locator(".poi").first.click(); pg.locator("#detail label input").uncheck(); assert pg.locator("#detail iframe").count() == 0
@@ -69,7 +81,7 @@ try:
         pg.locator(".poi").first.click(); assert pg.locator("#detail").is_visible()
         pg.keyboard.press("Escape"); assert pg.locator("#detail").is_hidden() and pg.locator(".poi.sel").count() == 0
         pg.locator(".poi").first.click(); pg.locator("#closeDetail").click(); assert pg.locator("#detail").is_hidden()
-        pg.locator("path.leaflet-interactive").first.click(force=True); assert pg.locator("#detail").is_visible(), "markerklik deselecteert ten onrechte"
+        mclick(); assert pg.locator("#detail").is_visible(), "markerklik deselecteert ten onrechte"
         pg.mouse.click(1400, 150); pg.wait_for_timeout(200); assert pg.locator("#detail").is_hidden() and pg.locator(".poi.sel").count() == 0
         assert not errs, errs
         pg.screenshot(path="/tmp/ui.png"); print("UI-TEST OK", status()); b.close()

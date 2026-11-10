@@ -112,6 +112,7 @@
   .pending .btn { align-self:flex-start; }
   .postsBody details summary { cursor:pointer; padding:2px 0; }
   .postsBody ul { margin:4px 0 4px 18px; padding:0; }
+  .pEmbed iframe { width:100%; height:480px; border:1px solid var(--line); border-radius:var(--r); margin:4px 0; background:#fff; }
   .postsBody pre { white-space:pre-wrap; font-size:11px; max-height:120px; overflow:auto; background:#fff; padding:6px; border-radius:6px; border:1px solid var(--line); }
 
   .stay { background:#1c2330; color:#fff; border:2px solid #fff; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 4px rgba(0,0,0,.4); }
@@ -455,12 +456,18 @@ function renderDetail() {
     const d = document.createElement("div"); d.className = "src";
     d.innerHTML = `${s.evidence ? `<blockquote>${esc(s.evidence)}</blockquote>` : ""}<a class="meta" target="_blank" href="${s.url}">Open op ${s.shortcode.startsWith("tt") ? "TikTok" : "Instagram"}</a>`;
     if (embedOn) {
-      const f = document.createElement("iframe"); f.loading = "lazy"; f.src = s.shortcode.startsWith("tt_") ? `https://www.tiktok.com/embed/v2/${s.shortcode.slice(3)}` : `https://www.instagram.com/p/${s.shortcode}/embed/`;
-      d.append(f);
+      d.append(embedFrame(s.shortcode));
     }
     el.append(d);
   });
   el.insertAdjacentHTML("beforeend", `<div class="hint"><kbd>↑</kbd> <kbd>↓</kbd> navigeren · <kbd>k</kbd> houden · <kbd>x</kbd> afwijzen · <kbd>Esc</kbd> sluiten</div>`);
+}
+
+// Gedeelde weergave van een post (Instagram of TikTok) als embed; gebruikt in het detailpaneel en in het posts-overzicht
+function embedFrame(shortcode) {
+  const f = document.createElement("iframe"); f.loading = "lazy";
+  f.src = shortcode.startsWith("tt_") ? `https://www.tiktok.com/embed/v2/${shortcode.slice(3)}` : `https://www.instagram.com/p/${shortcode}/embed/`;
+  return f;
 }
 
 function row(p) {
@@ -504,8 +511,13 @@ async function loadPosts() {
     const ok = c.filter(x => x.resolved).length;
     const d = document.createElement("details");
     d.innerHTML = `<summary><a target="_blank" href="${p.url}">${p.shortcode}</a> <span class="meta">${ok}/${c.length} plekken gekoppeld</span></summary>` +
-      `<ul>${c.map(x => `<li>${x.resolved ? "✓" : "✗"} ${esc(x.name)}${x.city ? ", " + esc(x.city) : ""}</li>`).join("")}</ul>` +
-      `<pre>${esc(p.caption || "")}</pre>`;
+      `<ul>${c.map(x => `<li>${x.resolved ? "✓" : "✗"} ${x.poi_id ? `<a href="#" class="goPoi" data-id="${x.poi_id}">${esc(x.name)}</a>` : esc(x.name)}${x.city ? ", " + esc(x.city) : ""}</li>`).join("")}</ul>` +
+      `<div class="pEmbed"></div><pre>${esc(p.caption || "")}</pre>`;
+    d.addEventListener("toggle", () => {
+      const slot = d.querySelector(".pEmbed");
+      if (d.open && embedOn && !slot.firstChild) slot.append(embedFrame(p.shortcode));
+    });
+    d.querySelectorAll(".goPoi").forEach(a => a.onclick = e => { e.preventDefault(); const id = +a.dataset.id; if (pois.some(x => x.id === id)) select(id, {pan: true, scroll: true}); });
     body.append(d);
   });
 }

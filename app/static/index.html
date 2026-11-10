@@ -60,7 +60,7 @@
   #syncOut:empty { display:none; }
 
   /* detail */
-  #detail { flex:0 1 auto; min-height:140px; padding:12px; border-bottom:1px solid var(--line); background:var(--bg); max-height:58vh; overflow:auto; box-shadow:inset 3px 0 0 var(--ac); }
+  #detail { flex:0 1 auto; min-height:min(40vh, 340px); padding:12px; border-bottom:1px solid var(--line); background:var(--bg); max-height:58vh; overflow:auto; box-shadow:inset 3px 0 0 var(--ac); }
   .dHead { display:flex; align-items:flex-start; gap:8px; }
   .dHead .t { flex:1; min-width:0; }
   .dHead h2 { font-size:15px; font-weight:650; margin:0; letter-spacing:-.01em; }
@@ -104,6 +104,7 @@
   #posts > details > summary .chev { margin-left:auto; color:var(--muted); transition:transform .15s; }
   #posts > details[open] > summary .chev { transform:rotate(180deg); }
   .badge.warn { background:#fde9c8; color:#8a5200; }
+  #side.hasSel .postsBody { max-height:14vh; }
   .postsBody { padding:0 12px 10px; max-height:34vh; overflow:auto; display:flex; flex-direction:column; gap:8px; }
   .postsBody a { color:var(--ac); text-decoration:none; }
   .pending { display:flex; flex-direction:column; gap:6px; padding:8px; background:#fff; border:1px solid var(--line); border-radius:var(--r); }
@@ -398,6 +399,7 @@ function render() {
 
 function select(id, o = {}) {
   selectedId = id;
+  $("#posts details")?.removeAttribute("open");  // ruimte voor het detailpaneel met de post
   if (isMobile() && document.body.dataset.sheet === "peek") setSheet("half");
   render();
   const p = pois.find(x => x.id === id);

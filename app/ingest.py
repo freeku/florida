@@ -1,4 +1,6 @@
 """Instagram-post -> tekst -> Claude-kandidaten -> Places-resolve -> POI-database."""
+import base64
+import functools
 import json
 import math
 import os
@@ -89,18 +91,45 @@ def haversine_km(a, b):
 
 
 # ---------- 1. Instagram ophalen ----------
+@functools.lru_cache(maxsize=8)
+def _ig_post(shortcode: str):
+    """Instaloader-Post (gecachet, zodat tekst + afbeeldingen één Instagram-request kosten)."""
+    import instaloader
+    L = instaloader.Instaloader(quiet=True, download_pictures=False, download_videos=False,
+                                download_video_thumbnails=False, save_metadata=False)
+    if IG_USER and os.path.exists(IG_SESSION_FILE):
+        L.load_session_from_file(IG_USER, IG_SESSION_FILE)
+    return instaloader.Post.from_shortcode(L.context, shortcode)
+
+
+MAX_IMAGES = int(os.getenv("MAX_IMAGES", "10"))
+
+
+def fetch_post_images(shortcode: str, limit: int = MAX_IMAGES) -> list[tuple[str, bytes]]:
+    """Slides van een Instagram-post (carrousel of enkele foto) als [(media_type, bytes)]. Video's: alleen het omslagbeeld."""
+    try:
+        post = _ig_post(shortcode)
+        if post.typename == "GraphSidecar":
+            urls = [n.display_url for n in post.get_sidecar_nodes()][:limit]
+        else:
+            urls = [post.url]
+        out = []
+        for u in urls:
+            r = httpx.get(u, timeout=20, headers=UA)
+            r.raise_for_status()
+            ct = r.headers.get("content-type", "image/jpeg").split(";")[0]
+            if ct in ("image/jpeg", "image/png", "image/webp", "image/gif") and len(r.content) < 4_500_000:
+                out.append((ct, r.content))
+        return out
+    except Exception as e:
+        print(f"[ingest] afbeeldingen {shortcode} niet op te halen: {e}")
+        return []
+
+
 def fetch_post_text(shortcode: str) -> str | None:
     """Caption + locatietag via Instaloader. Geeft None als ophalen mislukt (-> needs_text)."""
     try:
-        import instaloader
-    except ImportError:
-        return None
-    try:
-        L = instaloader.Instaloader(quiet=True, download_pictures=False, download_videos=False,
-                                    download_video_thumbnails=False, save_metadata=False)
-        if IG_USER and os.path.exists(IG_SESSION_FILE):
-            L.load_session_from_file(IG_USER, IG_SESSION_FILE)
-        post = instaloader.Post.from_shortcode(L.context, shortcode)
+        post = _ig_post(shortcode)
         parts = [f"Account: @{post.owner_username}", f"Caption: {post.caption or ''}"]
         if post.location:
             parts.append(f"Locatietag: {post.location.name} ({post.location.lat}, {post.location.lng})")
@@ -132,6 +161,27 @@ Regels: alleen specifieke plekken (geen 'Miami' of 'het strand' in het algemeen)
 neem een plek niet op als je de naam moet verzinnen; lege array als er niets concreets staat."""
 
 
+def _extract_json(msg) -> list[dict]:
+    raw = "".join(b.text for b in msg.content if b.type == "text").strip()
+    raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.M).strip()
+    data = json.loads(raw)
+    return data if isinstance(data, list) else []
+
+
+def parse_images_with_claude(images: list[tuple[str, bytes]], text: str, url: str) -> list[dict]:
+    """Voor posts waarvan de tips in de beelden staan (carrousel met tekst-slides): Claude leest de afbeeldingen."""
+    import anthropic
+    client = anthropic.Anthropic()
+    content = []
+    for i, (mt, data) in enumerate(images, 1):
+        content.append({"type": "text", "text": f"Slide {i}:"})
+        content.append({"type": "image", "source": {"type": "base64", "media_type": mt, "data": base64.b64encode(data).decode()}})
+    content.append({"type": "text", "text": f"Post: {url}\n\n{text}\n\nDe tips staan (mede) in de afbeeldingen hierboven. Lees de tekst in beeld en haal de plekken eruit; "
+                                            "geef bij 'evidence' kort aan op welke slide en wat er staat."})
+    msg = client.messages.create(model=CLAUDE_MODEL, max_tokens=3000, system=SYSTEM, messages=[{"role": "user", "content": content}])
+    return _extract_json(msg)
+
+
 def parse_with_claude(text: str, url: str) -> list[dict]:
     import anthropic
     client = anthropic.Anthropic()
@@ -139,10 +189,7 @@ def parse_with_claude(text: str, url: str) -> list[dict]:
         model=CLAUDE_MODEL, max_tokens=2000, system=SYSTEM,
         messages=[{"role": "user", "content": f"Post: {url}\n\n{text}"}],
     )
-    raw = "".join(b.text for b in msg.content if b.type == "text").strip()
-    raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.M).strip()
-    data = json.loads(raw)
-    return data if isinstance(data, list) else []
+    return _extract_json(msg)
 
 
 # ---------- 3. Resolve naar echte plek ----------
@@ -231,6 +278,10 @@ def process(shortcode: str):
     db.run("UPDATE posts SET caption=? WHERE shortcode=?", (text, shortcode))
     try:
         cands = parse_with_claude(text, post["url"])
+        if not cands and not shortcode.startswith("tt"):  # niets in de caption: tips zitten waarschijnlijk in de beelden
+            imgs = fetch_post_images(shortcode)
+            if imgs:
+                cands = parse_images_with_claude(imgs, text, post["url"])
         result = []
         for c in cands:
             place = resolve_place(c.get("name", ""), c.get("city", ""))

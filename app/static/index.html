@@ -112,6 +112,7 @@
   .pending .btn { align-self:flex-start; }
   .postsBody details summary { cursor:pointer; padding:2px 0; }
   .postsBody ul { margin:4px 0 4px 18px; padding:0; }
+  .reparse { margin:4px 0; }
   .pEmbed iframe { width:100%; height:480px; border:1px solid var(--line); border-radius:var(--r); margin:4px 0; background:#fff; }
   .postsBody pre { white-space:pre-wrap; font-size:11px; max-height:120px; overflow:auto; background:#fff; padding:6px; border-radius:6px; border:1px solid var(--line); }
 
@@ -512,11 +513,12 @@ async function loadPosts() {
     const d = document.createElement("details");
     d.innerHTML = `<summary><a target="_blank" href="${p.url}">${p.shortcode}</a> <span class="meta">${ok}/${c.length} plekken gekoppeld</span></summary>` +
       `<ul>${c.map(x => `<li>${x.resolved ? "✓" : "✗"} ${x.poi_id ? `<a href="#" class="goPoi" data-id="${x.poi_id}">${esc(x.name)}</a>` : esc(x.name)}${x.city ? ", " + esc(x.city) : ""}</li>`).join("")}</ul>` +
-      `<div class="pEmbed"></div><pre>${esc(p.caption || "")}</pre>`;
+      `<button class="btn reparse" title="Haalt de plekken opnieuw op, ook uit de afbeeldingen als de caption niets oplevert">${ic("redo")}Opnieuw parsen</button><div class="pEmbed"></div><pre>${esc(p.caption || "")}</pre>`;
     d.addEventListener("toggle", () => {
       const slot = d.querySelector(".pEmbed");
       if (d.open && embedOn && !slot.firstChild) slot.append(embedFrame(p.shortcode));
     });
+    d.querySelector(".reparse").onclick = async e => { e.preventDefault(); await api(`/api/posts/${p.shortcode}/retry`, {method: "POST"}); setTimeout(load, 8000); setTimeout(load, 25000); e.target.closest("button").textContent = "In de wachtrij…"; };
     d.querySelectorAll(".goPoi").forEach(a => a.onclick = e => { e.preventDefault(); const id = +a.dataset.id; if (pois.some(x => x.id === id)) select(id, {pan: true, scroll: true}); });
     body.append(d);
   });
